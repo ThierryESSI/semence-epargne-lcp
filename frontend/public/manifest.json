@@ -1,0 +1,50 @@
+{
+  "name": "SEMENCE ÉPARGNE — Le Crédit Panafricain",
+  "short_name": "Semence Épargne",
+  "description": "Plateforme d'épargne mobile — Le Crédit Panafricain (LCP)",
+  "start_url": "/client",
+  "display": "standalone",
+  "background_color": "#1a2e1c",
+  "theme_color": "#2d6a4f",
+  "orientation": "portrait-primary",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot1.png",
+      "sizes": "375x812",
+      "type": "image/png",
+      "label": "Écran d'accueil client"
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Mon compte",
+      "short_name": "Compte",
+      "description": "Voir mon solde",
+      "url": "/client",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mes transactions",
+      "short_name": "Transactions",
+      "description": "Historique de mes opérations",
+      "url": "/client/transactions",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

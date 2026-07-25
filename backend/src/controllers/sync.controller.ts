@@ -1,0 +1,241 @@
+// ============================================================
+// SEMENCE ÉPARGNE v6 — Le Crédit Panafricain (LCP)
+// © 2024-2026 MaGestion Facile — M. Thierry ESSI
+// Contact : +225 07 47 19 67 84 | facebook.com/EasyGestion225
+// PROPRIÉTÉ INTELLECTUELLE — Toute reproduction interdite sans
+// autorisation écrite. Voir fichier LICENSE.md à la racine.
+// ============================================================
+// backend/src/controllers/sync.controller.ts
+// Traite un lot d'opérations effectuées hors-ligne (offline queue)
+// Chaque opération est rejouée côté serveur dans l'ordre chronologique.
+
+import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import prisma from '../utils/prisma';
+import { verifyQrToken, verifyHashedCode, generateCodeActeur, generateRef } from '../utils/crypto';
+import { sendSms, tpl } from '../utils/sms';
+
+interface OfflineOp {
+  id:        string;   // UUID généré côté client
+  type:      'DEPOT_CARTE' | 'OUVERTURE_COMPTE' | 'ACTIVATION_COMPTE';
+  createdAt: string;   // ISO timestamp de l'opération offline
+  payload:   any;
+}
+
+interface SyncResult {
+  id:      string;
+  type:    string;
+  success: boolean;
+  message: string;
+  data?:   any;
+  error?:  string;
+}
+
+export async function syncOfflineQueue(req: Request, res: Response) {
+  const { operations }: { operations: OfflineOp[] } = req.body;
+
+  if (!Array.isArray(operations) || operations.length === 0) {
+    return res.status(400).json({ error: 'operations[] requis et non vide' });
+  }
+
+  // Limiter à 100 opérations par batch
+  if (operations.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 opérations par synchronisation' });
+  }
+
+  // Trier par date de création (ordre chronologique)
+  const sorted = [...operations].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  const results: SyncResult[] = [];
+
+  for (const op of sorted) {
+    try {
+      let result: SyncResult;
+
+      switch (op.type) {
+
+        // ─── Dépôt carte Semence Épargne ───────────────────────────────────
+        case 'DEPOT_CARTE':
+          result = await syncDepotCarte(op, req.user!.userId);
+          break;
+
+        // ─── Ouverture compte client ────────────────────────────────────────
+        case 'OUVERTURE_COMPTE':
+          result = await syncOuvertureCompte(op, req.user!.userId);
+          break;
+
+        // ─── Activation compte ──────────────────────────────────────────────
+        case 'ACTIVATION_COMPTE':
+          result = await syncActivationCompte(op, req.user!.userId);
+          break;
+
+        default:
+          result = { id: op.id, type: op.type, success: false, error: `Type d'opération inconnu : ${op.type}` };
+      }
+
+      results.push(result);
+    } catch (err: any) {
+      results.push({ id: op.id, type: op.type, success: false, error: err.message || 'Erreur interne' });
+    }
+  }
+
+  // Log d'audit global
+  await prisma.auditLog.create({
+    data: {
+      action:   'SYNC_OFFLINE',
+      entite:   'SyncBatch',
+      entiteId: `batch-${Date.now()}`,
+      actorId:  req.user!.userId,
+      details:  {
+        total:   results.length,
+        succes:  results.filter(r => r.success).length,
+        echecs:  results.filter(r => !r.success).length,
+      }
+    }
+  });
+
+  return res.json({
+    success: true,
+    total:   results.length,
+    succes:  results.filter(r => r.success).length,
+    echecs:  results.filter(r => !r.success).length,
+    results,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sync : Dépôt carte
+// ─────────────────────────────────────────────────────────────────────────────
+async function syncDepotCarte(op: OfflineOp, actorId: string): Promise<SyncResult> {
+  const { qrEpargneToken, codeValidation } = op.payload;
+
+  // Vérifier que cette opération offline n'a pas déjà été traitée (idempotence)
+  const existing = await prisma.auditLog.findFirst({
+    where: { details: { path: ['offlineId'], equals: op.id } }
+  });
+  if (existing) {
+    return { id: op.id, type: op.type, success: true, message: 'Déjà synchronisée (doublon ignoré)' };
+  }
+
+  const { valid, payload } = verifyQrToken(qrEpargneToken);
+  if (!valid || payload?.type !== 'EPARGNE') {
+    return { id: op.id, type: op.type, success: false, error: 'QR Code épargne invalide' };
+  }
+
+  const carte = await prisma.carte.findUnique({ where: { id: payload.carteId } });
+  if (!carte) return { id: op.id, type: op.type, success: false, error: 'Carte introuvable' };
+  if (carte.statut !== 'DISPONIBLE' && carte.statut !== 'VENDUE') {
+    return { id: op.id, type: op.type, success: false, error: `Carte ${carte.statut} — déjà utilisée ou annulée` };
+  }
+  if (!verifyHashedCode(codeValidation, carte.codeValidation)) {
+    return { id: op.id, type: op.type, success: false, error: 'Code de validation incorrect' };
+  }
+
+  const compte = await prisma.compte.findUnique({ where: { userId: actorId } });
+  if (!compte || compte.statut !== 'ACTIF') {
+    return { id: op.id, type: op.type, success: false, error: 'Compte inactif ou introuvable' };
+  }
+
+  const [cfgFrais, cfgLcp] = await Promise.all([
+    prisma.config.findUnique({ where: { cle: 'FRAIS_TAUX' } }),
+    prisma.config.findUnique({ where: { cle: 'PART_LCP' } }),
+  ]);
+  const taux    = parseFloat(cfgFrais?.valeur || '0.01');
+  const tauxLcp = parseFloat(cfgLcp?.valeur   || '0.006');
+  const mnt     = Number(carte.montant);
+  const frais   = Math.ceil(mnt * taux);
+  const partLcp = Math.round(mnt * tauxLcp);
+  const partDist = frais - partLcp;
+  const net     = mnt - frais;
+
+  const [transaction] = await prisma.$transaction([
+    prisma.transaction.create({
+      data: {
+        reference:   generateRef('TXN'),
+        type:        'DEPOT_CARTE',
+        montant:     mnt,
+        frais,
+        montantNet:  net,
+        statut:      'SUCCES',
+        compteId:    compte.id,
+        carteId:     carte.id,
+        description: `Dépôt offline ${carte.reference} — ${new Date(op.createdAt).toLocaleString('fr-CI')}`,
+        metadata:    { offlineId: op.id, offlineAt: op.createdAt, partLcp, partDist },
+      }
+    }),
+    prisma.compte.update({ where: { id: compte.id }, data: { solde: { increment: net } } }),
+    prisma.carte.update({ where: { id: carte.id }, data: { statut: 'UTILISEE', usedAt: new Date(op.createdAt), usedByCompteId: compte.id } }),
+  ]);
+
+  await prisma.auditLog.create({
+    data: { action: 'SYNC_DEPOT_CARTE', entite: 'Transaction', entiteId: transaction.id, actorId,
+      details: { offlineId: op.id, offlineAt: op.createdAt, carteRef: carte.reference, mnt, frais, net, partLcp, partDist } }
+  });
+
+  const updated = await prisma.compte.findUnique({ where: { id: compte.id } });
+  const user    = await prisma.user.findUnique({ where: { id: actorId }, select: { telephone: true } });
+  if (user) sendSms({ to: user.telephone, message: tpl.depotSucces(mnt, frais, Number(updated?.solde)), userId: actorId, transactionId: transaction.id }).catch(() => {});
+
+  return {
+    id: op.id, type: op.type, success: true,
+    message: 'Dépôt synchronisé avec succès',
+    data: { transactionRef: transaction.reference, montant: mnt, frais, montantNet: net, nouveauSolde: Number(updated?.solde), repartition: { partLcp, partDist } }
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sync : Ouverture de compte
+// ─────────────────────────────────────────────────────────────────────────────
+async function syncOuvertureCompte(op: OfflineOp, actorId: string): Promise<SyncResult> {
+  const { nom, prenom, email, telephone, password, region, ville, commune, typeCompte = 'ORDINAIRE', conseillerId } = op.payload;
+
+  // Idempotence : vérifier si le compte existe déjà (email ou téléphone)
+  const existing = await prisma.user.findFirst({ where: { OR: [{ email }, { telephone }] } });
+  if (existing) {
+    return { id: op.id, type: op.type, success: true, message: `Compte déjà existant pour ${email} (doublon ignoré)` };
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const countClients = await prisma.client.count();
+
+  const user = await prisma.user.create({
+    data: { email, telephone, passwordHash, nom: nom.toUpperCase(), prenom, role: 'CLIENT', actif: false }
+  });
+
+  const codeClient   = generateCodeActeur('CLI', countClients + 1);
+  const numeroCompte = `SE-${user.id.slice(-8).toUpperCase()}`;
+
+  await prisma.client.create({ data: { code: codeClient, region, ville, commune, conseillerId, userId: user.id } });
+  await prisma.compte.create({ data: { numeroCompte, type: typeCompte as any, userId: user.id } });
+
+  await prisma.auditLog.create({
+    data: { action: 'SYNC_OUVERTURE_COMPTE', entite: 'User', entiteId: user.id, actorId,
+      details: { offlineId: op.id, offlineAt: op.createdAt, codeClient, numeroCompte } }
+  });
+
+  sendSms({ to: telephone, message: tpl.compteOuvert(`${prenom} ${nom}`, numeroCompte), userId: user.id }).catch(() => {});
+
+  return { id: op.id, type: op.type, success: true, message: 'Compte synchronisé avec succès', data: { userId: user.id, codeClient, numeroCompte } };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sync : Activation de compte
+// ─────────────────────────────────────────────────────────────────────────────
+async function syncActivationCompte(op: OfflineOp, actorId: string): Promise<SyncResult> {
+  const { userId } = op.payload;
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return { id: op.id, type: op.type, success: false, error: 'Utilisateur introuvable' };
+  if (user.actif) return { id: op.id, type: op.type, success: true, message: 'Compte déjà actif (doublon ignoré)' };
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { actif: true } }),
+    prisma.compte.update({ where: { userId }, data: { statut: 'ACTIF' } }),
+  ]);
+
+  sendSms({ to: user.telephone, message: tpl.compteActive(`${user.prenom} ${user.nom}`), userId }).catch(() => {});
+
+  return { id: op.id, type: op.type, success: true, message: 'Activation synchronisée' };
+}
