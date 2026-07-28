@@ -9,18 +9,77 @@ enum Role {
   CONSEILLER
   CLIENT
 }
-enum StatutCompte { EN_ATTENTE ACTIF SUSPENDU CLOTURE }
-enum TypeCompte { ORDINAIRE INVEST_ENTREPRISE INVEST_ORDINAIRE CARTE_MAGNETIQUE }
-enum StatutCarte { DISPONIBLE VENDUE EN_COURS_ACTIVATION UTILISEE ANNULEE }
-enum StatutTransaction { EN_COURS SUCCES ECHEC ANNULEE }
-enum TypeTransaction { DEPOT_CARTE TRANSFERT RETRAIT COMMISSION FRAIS BONUS_EPARGNE VIREMENT_LCP }
-enum CanalNotification { SMS WHATSAPP EMAIL IN_APP }
-enum StatutNotification { EN_ATTENTE ENVOYE ECHEC }
-enum TypeDistributeur { INTERNE AGREE }
-enum TypeConseiller { STAND MOBILE }
-enum PalierBonus { TROIS_MOIS SIX_MOIS DOUZE_MOIS }
-enum StatutEpargne { EN_COURS ELIGIBLE BONIFIE INTERROMPU EXPIRE }
-enum StatutVirement { EN_ATTENTE VALIDE REJETE ANNULE }
+enum StatutCompte {
+  EN_ATTENTE
+  ACTIF
+  SUSPENDU
+  CLOTURE
+}
+enum TypeCompte {
+  ORDINAIRE
+  INVEST_ENTREPRISE
+  INVEST_ORDINAIRE
+  CARTE_MAGNETIQUE
+}
+enum StatutCarte {
+  DISPONIBLE
+  VENDUE
+  EN_COURS_ACTIVATION
+  UTILISEE
+  ANNULEE
+}
+enum StatutTransaction {
+  EN_COURS
+  SUCCES
+  ECHEC
+  ANNULEE
+}
+enum TypeTransaction {
+  DEPOT_CARTE
+  TRANSFERT
+  RETRAIT
+  COMMISSION
+  FRAIS
+  BONUS_EPARGNE
+  VIREMENT_LCP
+}
+enum CanalNotification {
+  SMS
+  WHATSAPP
+  EMAIL
+  IN_APP
+}
+enum StatutNotification {
+  EN_ATTENTE
+  ENVOYE
+  ECHEC
+}
+enum TypeDistributeur {
+  INTERNE
+  AGREE
+}
+enum TypeConseiller {
+  STAND
+  MOBILE
+}
+enum PalierBonus {
+  TROIS_MOIS
+  SIX_MOIS
+  DOUZE_MOIS
+}
+enum StatutEpargne {
+  EN_COURS
+  ELIGIBLE
+  BONIFIE
+  INTERROMPU
+  EXPIRE
+}
+enum StatutVirement {
+  EN_ATTENTE
+  VALIDE
+  REJETE
+  ANNULE
+}
 
 // ─── Permissions granulaires : MODULE_PROPRIETE ───────────────────────
 // Format : MODULE_ACTION  (ex: CLIENTS_VOIR, CLIENTS_AJOUTER...)
