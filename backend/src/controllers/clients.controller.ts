@@ -42,8 +42,7 @@ export async function listerClients(req: Request, res: Response) {
     prisma.client.findMany({
       where, skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' },
       include: {
-        user: { select: { id: true, nom: true, prenom: true, email: true, telephone: true, actif: true, createdAt: true } },
-        compte: { select: { numeroCompte: true, solde: true, statut: true } },
+        user: { select: { id: true, nom: true, prenom: true, email: true, telephone: true, actif: true, createdAt: true, compte: { select: { numeroCompte: true, solde: true, statut: true } } } },
         conseiller: { select: { code: true, user: { select: { nom: true } } } }
       }
     })
@@ -55,8 +54,7 @@ export async function getClient(req: Request, res: Response) {
   const client = await prisma.client.findUnique({
     where: { id: req.params.id },
     include: {
-      user: { select: { id: true, nom: true, prenom: true, email: true, telephone: true, actif: true, createdAt: true } },
-      compte: { include: { transactions: { orderBy: { createdAt: 'desc' }, take: 10, include: { carte: { select: { reference: true } } } } } },
+      user: { select: { id: true, nom: true, prenom: true, email: true, telephone: true, actif: true, createdAt: true, compte: { include: { transactions: { orderBy: { createdAt: 'desc' }, take: 10, include: { carte: { select: { reference: true } } } } } } } },
       conseiller: { include: { user: { select: { nom: true, prenom: true } }, distributeur: { select: { nomEntreprise: true } } } }
     }
   });

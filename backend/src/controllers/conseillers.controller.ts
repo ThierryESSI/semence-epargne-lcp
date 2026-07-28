@@ -57,7 +57,7 @@ export async function creerConseiller(req: Request, res: Response) {
       }
     });
 
-    await prisma.compte.create({ data: { numeroCompte: `${code}-CPT`, type: 'ORDINAIRE', statut: 'ACTIF', userId: user.id } });
+    await prisma.compte.create({ data: { numeroCompte: `${code}-CPT`, rib: `RI-${code}-CPT`, type: 'ORDINAIRE', statut: 'ACTIF', userId: user.id } });
     await prisma.conseiller.create({
       data: { code, type: type as any, region, departement, commune, codeStand, distributeurId, caution: caution ? parseFloat(caution) : null, userId: user.id }
     });

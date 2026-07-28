@@ -72,12 +72,12 @@ export async function syncOfflineQueue(req: Request, res: Response) {
           break;
 
         default:
-          result = { id: op.id, type: op.type, success: false, error: `Type d'opération inconnu : ${op.type}` };
+          result = { id: op.id, type: op.type, success: false, message: '', error: `Type d'opération inconnu : ${op.type}` };
       }
 
       results.push(result);
     } catch (err: any) {
-      results.push({ id: op.id, type: op.type, success: false, error: err.message || 'Erreur interne' });
+      results.push({ id: op.id, type: op.type, success: false, message: '', error: err.message || 'Erreur interne' });
     }
   }
 
@@ -121,21 +121,21 @@ async function syncDepotCarte(op: OfflineOp, actorId: string): Promise<SyncResul
 
   const { valid, payload } = verifyQrToken(qrEpargneToken);
   if (!valid || payload?.type !== 'EPARGNE') {
-    return { id: op.id, type: op.type, success: false, error: 'QR Code épargne invalide' };
+    return { id: op.id, type: op.type, success: false, message: '', error: 'QR Code épargne invalide' };
   }
 
   const carte = await prisma.carte.findUnique({ where: { id: payload.carteId } });
-  if (!carte) return { id: op.id, type: op.type, success: false, error: 'Carte introuvable' };
+  if (!carte) return { id: op.id, type: op.type, success: false, message: '', error: 'Carte introuvable' };
   if (carte.statut !== 'DISPONIBLE' && carte.statut !== 'VENDUE') {
-    return { id: op.id, type: op.type, success: false, error: `Carte ${carte.statut} — déjà utilisée ou annulée` };
+    return { id: op.id, type: op.type, success: false, message: '', error: `Carte ${carte.statut} — déjà utilisée ou annulée` };
   }
   if (!verifyHashedCode(codeValidation, carte.codeValidation)) {
-    return { id: op.id, type: op.type, success: false, error: 'Code de validation incorrect' };
+    return { id: op.id, type: op.type, success: false, message: '', error: 'Code de validation incorrect' };
   }
 
   const compte = await prisma.compte.findUnique({ where: { userId: actorId } });
   if (!compte || compte.statut !== 'ACTIF') {
-    return { id: op.id, type: op.type, success: false, error: 'Compte inactif ou introuvable' };
+    return { id: op.id, type: op.type, success: false, message: '', error: 'Compte inactif ou introuvable' };
   }
 
   const [cfgFrais, cfgLcp] = await Promise.all([
@@ -208,14 +208,15 @@ async function syncOuvertureCompte(op: OfflineOp, actorId: string): Promise<Sync
   const numeroCompte = `SE-${user.id.slice(-8).toUpperCase()}`;
 
   await prisma.client.create({ data: { code: codeClient, region, ville, commune, conseillerId, userId: user.id } });
-  await prisma.compte.create({ data: { numeroCompte, type: typeCompte as any, userId: user.id } });
+  await prisma.compte.create({ data: { numeroCompte, rib: `RI-${numeroCompte}`, type: typeCompte as any, userId: user.id } });
 
   await prisma.auditLog.create({
     data: { action: 'SYNC_OUVERTURE_COMPTE', entite: 'User', entiteId: user.id, actorId,
       details: { offlineId: op.id, offlineAt: op.createdAt, codeClient, numeroCompte } }
   });
 
-  sendSms({ to: telephone, message: tpl.compteOuvert(`${prenom} ${nom}`, numeroCompte), userId: user.id }).catch(() => {});
+  const appUrl = process.env.FRONTEND_URL || 'https://app.semenceep.ci';
+  sendSms({ to: telephone, message: tpl.compteOuvert(`${prenom} ${nom}`, numeroCompte, telephone, password, appUrl), userId: user.id }).catch(() => {});
 
   return { id: op.id, type: op.type, success: true, message: 'Compte synchronisé avec succès', data: { userId: user.id, codeClient, numeroCompte } };
 }
@@ -227,7 +228,7 @@ async function syncActivationCompte(op: OfflineOp, actorId: string): Promise<Syn
   const { userId } = op.payload;
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return { id: op.id, type: op.type, success: false, error: 'Utilisateur introuvable' };
+  if (!user) return { id: op.id, type: op.type, success: false, message: '', error: 'Utilisateur introuvable' };
   if (user.actif) return { id: op.id, type: op.type, success: true, message: 'Compte déjà actif (doublon ignoré)' };
 
   await prisma.$transaction([

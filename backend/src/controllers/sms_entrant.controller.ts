@@ -54,9 +54,7 @@ function parserSMS(body: string): ParsedSMS | null {
 }
 
 async function smsErreur(tel: string, msg: string, aide = true) {
-  const texteAide = aide ? '
-Format: RECHARGE [N-COMPTE] [REF-CARTE] [CODE4]
-Ex: RECHARGE SE-A1B2 CSEM-8C0G 5781' : '';
+  const texteAide = aide ? '\nFormat: RECHARGE [N-COMPTE] [REF-CARTE] [CODE4]\nEx: RECHARGE SE-A1B2 CSEM-8C0G 5781' : '';
   await sendSms({ to: tel, message: `LCP SEMENCE: ${msg}${texteAide}` }).catch(() => {});
 }
 
