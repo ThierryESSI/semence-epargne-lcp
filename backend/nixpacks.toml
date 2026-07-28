@@ -2,7 +2,7 @@
 nixPkgs = ["nodejs_20", "npm-9_x"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = ["DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy npm install"]
 
 [phases.build]
 cmds = ["npx prisma generate", "npm run build"]
