@@ -34,7 +34,7 @@ export default function Dashboard() {
   return (
     <div>
       <PageHeader
-        title={<><span>Tableau de bord</>}
+        title={<><span>Tableau de bord</span></>}
         subtitle="Vue d'ensemble de la plateforme Semence Épargne"
       />
 
