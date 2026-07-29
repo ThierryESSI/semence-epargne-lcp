@@ -1,27 +1,30 @@
 // frontend/src/App.tsx
 // © 2024-2026 MaGestion Facile — M. Thierry ESSI
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './lib/store';
-import HomePage            from './pages/public/HomePage';
-import LoginPage           from './pages/auth/LoginPage';
-import Layout              from './components/ui/Layout';
-import AdminDashboard      from './pages/admin/Dashboard';
-import AdminClients        from './pages/admin/Clients';
-import AdminDistributeurs  from './pages/admin/Distributeurs';
-import AdminConseillers    from './pages/admin/Conseillers';
-import AdminCartes         from './pages/admin/Cartes';
-import AdminTransactions   from './pages/admin/Transactions';
-import AdminRapports       from './pages/admin/Rapports';
-import AdminParametres     from './pages/admin/Parametres';
-import EpargnePlans        from './pages/admin/EpargnePlans';
-import GestionAdmins       from './pages/admin/GestionAdmins';
-import ClientDashboard     from './pages/client/ClientDashboard';
-import ClientTransactions  from './pages/client/ClientTransactions';
-import ClientRapports      from './pages/client/ClientRapports';
-import EpargnePage         from './pages/client/EpargnePage';
-import VirementPage        from './pages/client/VirementPage';
-import ActivationCartePage from './pages/client/ActivationCartePage';
-import OfflinePage         from './pages/OfflinePage';
+import Layout from './components/ui/Layout';
+import { Spinner } from './components/ui/DS';
+
+const HomePage = lazy(() => import('./pages/public/HomePage'));
+const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
+const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
+const AdminClients = lazy(() => import('./pages/admin/Clients'));
+const AdminDistributeurs = lazy(() => import('./pages/admin/Distributeurs'));
+const AdminConseillers = lazy(() => import('./pages/admin/Conseillers'));
+const AdminCartes = lazy(() => import('./pages/admin/Cartes'));
+const AdminTransactions = lazy(() => import('./pages/admin/Transactions'));
+const AdminRapports = lazy(() => import('./pages/admin/Rapports'));
+const AdminParametres = lazy(() => import('./pages/admin/Parametres'));
+const EpargnePlans = lazy(() => import('./pages/admin/EpargnePlans'));
+const GestionAdmins = lazy(() => import('./pages/admin/GestionAdmins'));
+const ClientDashboard = lazy(() => import('./pages/client/ClientDashboard'));
+const ClientTransactions = lazy(() => import('./pages/client/ClientTransactions'));
+const ClientRapports = lazy(() => import('./pages/client/ClientRapports'));
+const EpargnePage = lazy(() => import('./pages/client/EpargnePage'));
+const VirementPage = lazy(() => import('./pages/client/VirementPage'));
+const ActivationCartePage = lazy(() => import('./pages/client/ActivationCartePage'));
+const OfflinePage = lazy(() => import('./pages/OfflinePage'));
 
 const ROLE_HOME: Record<string,string> = {
   SUPER_ADMIN:'/admin', MASTER:'/admin',
@@ -47,6 +50,7 @@ const ADMIN = ['SUPER_ADMIN','MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE
 export default function App() {
   return (
     <BrowserRouter>
+      <Suspense fallback={<Spinner />}>
       <Routes>
         {/* Page publique */}
         <Route path="/"      element={<HomePage />} />
@@ -81,6 +85,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
