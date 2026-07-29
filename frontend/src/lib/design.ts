@@ -45,4 +45,18 @@ export const C = {
   domain:       'semenceep.ci',
 };
 
+export const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
+  actif: { bg: C.greenPale, color: C.green },
+  succes: { bg: C.greenPale, color: C.green },
+  disponible: { bg: C.greenPale, color: C.green },
+  en_attente: { bg: '#fef3c7', color: '#92400e' },
+  en_cours: { bg: C.bluePale, color: C.blue },
+  suspendu: { bg: C.redPale, color: C.red },
+  echec: { bg: C.redPale, color: C.red },
+  annulee: { bg: C.redPale, color: C.red },
+  cloture: { bg: '#f1f5f9', color: '#475569' },
+  utilisee: { bg: '#f1f5f9', color: '#475569' },
+  vendue: { bg: C.bluePale, color: C.blue },
+};
+
 export default C;
