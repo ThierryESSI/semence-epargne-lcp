@@ -1,5 +1,5 @@
 [build]
-builder = "nixpacks"
+buildCommand = "npm run build"
 
 [deploy]
 startCommand = "npx prisma migrate deploy && node dist/server.js"
