@@ -6,8 +6,6 @@
 // autorisation écrite. Voir fichier LICENSE.md à la racine.
 // ============================================================
 // frontend/src/components/ui/index.tsx
-import { statusColor } from '../../lib/utils';
-
 // ─── Card ──────────────────────────────────────────────────────────────────────
 export function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <div className={`bg-white rounded-xl shadow-sm border border-gray-100 p-5 ${className}`}>{children}</div>;
