@@ -35,7 +35,7 @@ export default function LoginPage() {
         <div style={{ textAlign:'center', marginBottom:32 }}>
           <img src={logo} alt="Semence Epargne" style={{ width:120, marginBottom:16, filter:'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }}/>
           <h1 style={{ color:'#fff', fontSize:22, fontWeight:800, margin:'0 0 6px' }}>SEMENCE EPARGNE</h1>
-          <p style={{ color:'rgba(255,255,255,0.65)', fontSize:13, margin:0 }}>Le Crédit Panafricain — S.A. Capital 700 000 000 FCFA</p>
+          
         </div>
 
         {/* Carte login */}
@@ -79,11 +79,7 @@ export default function LoginPage() {
         </div>
 
         {/* Footer */}
-        <p style={{ textAlign:'center', color:'rgba(255,255,255,0.3)', fontSize:11, marginTop:18, lineHeight:1.6 }}>
-          Siège : COCODY les OSCARS Bd Latrille, Abidjan, Côte d'Ivoire<br/>
-          RC CI-ABJ-2016-B 6706 · +225 27 35 96 05 99<br/>
-          Développé par <strong style={{ color:'rgba(255,255,255,0.5)' }}>MaGestion Facile</strong> · +225 07 47 19 67 84
-        </p>
+
       </div>
     </div>
   );
