@@ -8,7 +8,9 @@
 // frontend/src/lib/api.ts
 import axios from 'axios';
 
-export const api = axios.create({ baseURL: '/api', timeout: 15000 });
+const API_URL = import.meta.env.VITE_API_URL || '/api';
+
+export const api = axios.create({ baseURL: API_URL, timeout: 15000 });
 
 // Intercepteur : injecter le token JWT
 api.interceptors.request.use((config) => {
@@ -27,7 +29,7 @@ api.interceptors.response.use(
       const refresh = localStorage.getItem('refresh_token');
       if (refresh) {
         try {
-          const { data } = await axios.post('/api/auth/refresh', { refreshToken: refresh });
+          const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken: refresh });
           localStorage.setItem('access_token', data.accessToken);
           localStorage.setItem('refresh_token', data.refreshToken);
           orig.headers.Authorization = `Bearer ${data.accessToken}`;
