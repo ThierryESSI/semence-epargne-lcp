@@ -27,6 +27,17 @@ function generateRIB(suffix: string): string {
   return `LCP-CI-${suffix.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8).padEnd(8,'0')}`;
 }
 
+// Évite les collisions sur la contrainte unique `telephone`
+async function findFreeTelephone(base: string): Promise<string> {
+  let tel = base;
+  let i = 1;
+  while (await prisma.user.findUnique({ where: { telephone: tel } })) {
+    tel = `${base.slice(0, Math.max(1, 10 - String(i).length))}${i}`;
+    i++;
+  }
+  return tel;
+}
+
 async function main() {
 
   console.log('🌱 Initialisation LCP Semence Épargne v6...\n');
@@ -55,7 +66,7 @@ async function main() {
   const SA_PWD   = process.env.SUPER_ADMIN_PWD   || 'SuperAdmin@LCP2026!ChangeMe!';
   const sa = await prisma.user.upsert({
     where:{ email:SA_EMAIL }, update:{},
-    create:{ email:SA_EMAIL, telephone:SA_TEL, passwordHash:await bcrypt.hash(SA_PWD,12), nom:'SUPER ADMIN', prenom:'LCP', role:Role.SUPER_ADMIN, actif:true, permissions:[] }
+    create:{ email:SA_EMAIL, telephone:await findFreeTelephone(SA_TEL), passwordHash:await bcrypt.hash(SA_PWD,12), nom:'SUPER ADMIN', prenom:'LCP', role:Role.SUPER_ADMIN, actif:true, permissions:[] }
   });
   await prisma.compte.upsert({ where:{ userId:sa.id }, update:{}, create:{ numeroCompte:'LCP-SA-0001', rib:generateRIB('SA000001'), type:TypeCompte.ORDINAIRE, statut:StatutCompte.ACTIF, userId:sa.id } });
   console.log(`✅ SuperAdmin   : ${SA_EMAIL} / ${SA_PWD}`);
@@ -66,7 +77,7 @@ async function main() {
   const MASTER_PWD   = process.env.MASTER_PWD   || 'Master@LCP2026!ChangeMe!';
   const master = await prisma.user.upsert({
     where:{ email:MASTER_EMAIL }, update:{},
-    create:{ email:MASTER_EMAIL, telephone:MASTER_TEL, passwordHash:await bcrypt.hash(MASTER_PWD,12), nom:'CREDIT PANAFRICAIN', prenom:'LE', role:Role.MASTER, actif:true, permissions:[] }
+    create:{ email:MASTER_EMAIL, telephone:await findFreeTelephone(MASTER_TEL), passwordHash:await bcrypt.hash(MASTER_PWD,12), nom:'CREDIT PANAFRICAIN', prenom:'LE', role:Role.MASTER, actif:true, permissions:[] }
   });
   await prisma.compte.upsert({ where:{ userId:master.id }, update:{}, create:{ numeroCompte:'LCP-MASTER-0001', rib:generateRIB('MASTER001'), type:TypeCompte.ORDINAIRE, statut:StatutCompte.ACTIF, userId:master.id } });
   console.log(`✅ Master LCP   : ${MASTER_EMAIL} / ${MASTER_PWD}`);
