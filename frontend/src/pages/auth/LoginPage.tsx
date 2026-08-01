@@ -19,8 +19,8 @@ export default function LoginPage() {
     setError(''); setLoading(true);
     try {
       const { data } = await api.post('/auth/login', { identifiant, password });
-      setAuth(data.data.user, data.data.accessToken, data.data.refreshToken);
-      const role = data.data.user.role;
+      setAuth(data.user, data.accessToken, data.refreshToken);
+      const role = data.user.role;
       navigate(role === 'CLIENT' ? '/client' : '/admin');
     } catch(err: any) {
       setError(err.response?.data?.error || 'Identifiant ou mot de passe incorrect');
