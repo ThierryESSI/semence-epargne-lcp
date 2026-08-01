@@ -40,78 +40,140 @@ const DEFAULT_CMS: Record<string, string> = {
 };
 
 // ── Simulateur de crédit ──────────────────────────────────────────
+// Simulateur épargne Semence — plans + bonus + revenus périodiques
+
 function Simulateur() {
-  const [montant, setMontant] = useState(500000);
-  const [duree,   setDuree]   = useState(12);
-  const taux    = 0.025; // 2.5% mensuel
-  const mensualite = Math.round(montant * taux / (1 - Math.pow(1 + taux, -duree)));
-  const total      = Math.round(mensualite * duree);
-  const cout       = total - montant;
-  const taeg       = ((Math.pow(1 + taux, 12) - 1) * 100).toFixed(1);
+  const [plan,    setPlan]    = useState<'3'|'6'|'12'>('6');
+  const [montant, setMontant] = useState(50000);
+  const [versements, setVers] = useState(1);
+
+  const PLANS: Record<string, { label: string; mois: number; taux: number; versMin: number; color: string; desc: string }> = {
+    '3':  { label: 'Plan 3 mois',  mois: 3,  taux: 0.035, versMin: 2, color: '#F65A04', desc: 'Idéal pour un besoin de trésorerie rapide' },
+    '6':  { label: 'Plan 6 mois',  mois: 6,  taux: 0.08,  versMin: 3, color: '#1C5B9B', desc: 'Équilibre parfait rendement / durée' },
+    '12': { label: 'Plan 12 mois', mois: 12, taux: 0.17,  versMin: 6, color: '#0F2E52', desc: 'Maximum de bonus pour votre épargne' },
+  };
+
+  const p         = PLANS[plan];
+  const eligible  = versements >= p.versMin;
+  const totalEp   = montant * versements;
+  const bonus     = eligible ? Math.round(totalEp * p.taux) : 0;
+  const totalFin  = totalEp + bonus;
+  const revMens   = Math.round(totalFin / p.mois);
+
   const fCFA = (n: number) => new Intl.NumberFormat('fr-CI').format(n) + ' FCFA';
 
   return (
-    <div style={{ background: WHITE, borderRadius: 20, padding: '32px 28px', boxShadow: '0 8px 40px rgba(15,46,82,0.12)', border: `1px solid ${BORDER}` }}>
-      <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: PRI, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 8 }}>Simulateur de crédit</div>
-        <h3 style={{ fontSize: 22, fontWeight: 800, color: DARK, margin: 0 }}>Estimez votre financement</h3>
-        <p style={{ color: MUTED, fontSize: 13, marginTop: 6 }}>Résultat immédiat, sans engagement</p>
+    <div style={{ background: '#FFFFFF', borderRadius: 20, padding: '32px 28px', boxShadow: '0 8px 40px rgba(15,46,82,0.12)', border: '1px solid #DDE6F0' }}>
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#F65A04', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 8 }}>Simulateur d'épargne</div>
+        <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0F2E52', margin: 0 }}>Calculez votre bonus Semence</h3>
+        <p style={{ color: '#6B7C9A', fontSize: 13, marginTop: 6 }}>Résultat immédiat, sans engagement</p>
       </div>
 
-      {/* Slider montant */}
+      {/* Choix du plan */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 24 }}>
+        {Object.entries(PLANS).map(([key, pl]) => (
+          <button key={key} onClick={() => setPlan(key as any)}
+            style={{ background: plan === key ? pl.color : '#F7F9FC', color: plan === key ? '#fff' : '#0F2E52', border: `2px solid ${plan === key ? pl.color : '#DDE6F0'}`, borderRadius: 12, padding: '12px 8px', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>{pl.taux * 100}%</div>
+            <div style={{ fontSize: 11, fontWeight: 600, marginTop: 2, opacity: plan === key ? 0.9 : 0.6 }}>{pl.label}</div>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ background: '#F7F9FC', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 12, color: '#6B7C9A', textAlign: 'center' }}>
+        {p.desc} · Minimum {p.versMin} versements requis pour le bonus
+      </div>
+
+      {/* Slider montant par versement */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#0F2E52' }}>Montant par versement (carte)</label>
+          <span style={{ fontSize: 15, fontWeight: 800, color: '#F65A04' }}>{fCFA(montant)}</span>
+        </div>
+        <input type="range" min={5000} max={500000} step={5000} value={montant}
+          onChange={e => setMontant(+e.target.value)}
+          style={{ width: '100%', accentColor: p.color, height: 4, cursor: 'pointer' }}/>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7C9A', marginTop: 4 }}>
+          <span>5 000 FCFA</span><span>500 000 FCFA</span>
+        </div>
+      </div>
+
+      {/* Slider nombre de versements */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: DARK }}>Montant souhaité</label>
-          <span style={{ fontSize: 15, fontWeight: 800, color: PRI }}>{fCFA(montant)}</span>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#0F2E52' }}>Nombre de versements</label>
+          <span style={{ fontSize: 15, fontWeight: 800, color: '#1C5B9B' }}>{versements} versement{versements > 1 ? 's' : ''}</span>
         </div>
-        <input type="range" min={50000} max={5000000} step={50000} value={montant} onChange={e => setMontant(+e.target.value)}
-          style={{ width: '100%', accentColor: PRI, height: 4, cursor: 'pointer' }}/>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: MUTED, marginTop: 4 }}>
-          <span>50 000 FCFA</span><span>5 000 000 FCFA</span>
+        <input type="range" min={1} max={p.mois} step={1} value={versements}
+          onChange={e => setVers(+e.target.value)}
+          style={{ width: '100%', accentColor: p.color, height: 4, cursor: 'pointer' }}/>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7C9A', marginTop: 4 }}>
+          <span>1 versement</span><span>{p.mois} versements</span>
         </div>
-      </div>
-
-      {/* Slider durée */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: DARK }}>Durée de remboursement</label>
-          <span style={{ fontSize: 15, fontWeight: 800, color: SEC }}>{duree} mois</span>
-        </div>
-        <input type="range" min={3} max={36} step={3} value={duree} onChange={e => setDuree(+e.target.value)}
-          style={{ width: '100%', accentColor: SEC, height: 4, cursor: 'pointer' }}/>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: MUTED, marginTop: 4 }}>
-          <span>3 mois</span><span>36 mois</span>
-        </div>
+        {!eligible && (
+          <div style={{ background: '#fff8e7', borderRadius: 8, padding: '6px 12px', marginTop: 8, fontSize: 12, color: '#a16207', textAlign: 'center' }}>
+            Il vous faut {p.versMin - versements} versement{p.versMin - versements > 1 ? 's' : ''} de plus pour débloquer le bonus
+          </div>
+        )}
       </div>
 
       {/* Résultats */}
-      <div style={{ background: `linear-gradient(135deg, ${DARK}, ${SEC})`, borderRadius: 14, padding: '20px 24px', marginBottom: 20 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, textAlign: 'center' }}>
-          {[
-            ['Mensualité', fCFA(mensualite), WHITE],
-            ['Coût total', fCFA(cout), '#FFB380'],
-            [`TAEG fixe`, `${taeg}%`, '#80C8FF'],
-          ].map(([label, val, color]) => (
-            <div key={label}>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 4 }}>{label}</div>
-              <div style={{ color: color as string, fontWeight: 800, fontSize: 16 }}>{val}</div>
+      <div style={{ background: `linear-gradient(135deg, ${p.color}, ${p.color}CC)`, borderRadius: 16, padding: '20px 24px', marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginBottom: 16 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginBottom: 4 }}>Total épargné</div>
+            <div style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>{fCFA(totalEp)}</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginBottom: 4 }}>Bonus {(p.taux*100)}%</div>
+            <div style={{ color: eligible ? '#FFE27A' : 'rgba(255,255,255,0.3)', fontWeight: 800, fontSize: 18 }}>
+              {eligible ? `+${fCFA(bonus)}` : 'Non débloqué'}
             </div>
-          ))}
+          </div>
         </div>
-        <div style={{ textAlign: 'center', marginTop: 12, color: 'rgba(255,255,255,0.5)', fontSize: 10 }}>
-          Total remboursé : {fCFA(total)} · Taux mensuel : {(taux*100).toFixed(1)}% · Sans frais cachés
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginBottom: 4 }}>Total à l'échéance</div>
+            <div style={{ color: '#fff', fontWeight: 900, fontSize: 22 }}>{fCFA(totalFin)}</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginBottom: 4 }}>Revenu mensuel estimé</div>
+            <div style={{ color: '#fff', fontWeight: 900, fontSize: 22 }}>{fCFA(revMens)}</div>
+          </div>
         </div>
       </div>
 
-      <a href="#formulaire" style={{ display: 'block', background: `linear-gradient(135deg, ${PRI}, ${PRID})`, color: WHITE, textAlign: 'center', padding: '14px', borderRadius: 12, fontWeight: 700, fontSize: 15, textDecoration: 'none', boxShadow: `0 4px 20px rgba(246,90,4,0.35)` }}>
-        Valider mon projet →
+      {/* Détail période */}
+      <div style={{ background: '#F7F9FC', borderRadius: 12, padding: '14px 16px', marginBottom: 20 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#0F2E52', marginBottom: 10 }}>Détail sur {p.mois} mois</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {[
+            ['Durée du plan', `${p.mois} mois`],
+            ['Versements effectués', `${versements} sur ${p.mois} possibles`],
+            ['Montant total versé', fCFA(totalEp)],
+            ['Taux de bonus', `${(p.taux*100)}% ${eligible ? '✅ Éligible' : '⏳ En attente'}`],
+            ['Bonus versé à l\'échéance', eligible ? fCFA(bonus) : 'Non applicable'],
+            ['Total perçu à terme', fCFA(totalFin)],
+          ].map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <span style={{ color: '#6B7C9A' }}>{k}</span>
+              <span style={{ fontWeight: 600, color: '#0F2E52' }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <a href="#formulaire" style={{ display: 'block', background: `linear-gradient(135deg, ${p.color}, ${p.color}CC)`, color: '#fff', textAlign: 'center', padding: '14px', borderRadius: 12, fontWeight: 700, fontSize: 15, textDecoration: 'none', boxShadow: `0 4px 20px ${p.color}55` }}>
+        Démarrer mon plan {p.label} →
       </a>
-      <p style={{ textAlign: 'center', fontSize: 11, color: MUTED, marginTop: 10 }}>
-        Simulation non contractuelle — Taux indicatif sujet à étude de dossier
+      <p style={{ textAlign: 'center', fontSize: 11, color: '#6B7C9A', marginTop: 10 }}>
+        Simulation non contractuelle · Sous réserve d'éligibilité · Bonus versé à l'échéance du plan
       </p>
     </div>
   );
 }
+
 
 // ── Composant principal ───────────────────────────────────────────
 export default function HomePage() {
@@ -226,8 +288,8 @@ export default function HomePage() {
       <section id="simulateur" style={{ padding: '72px 6%', background: `linear-gradient(180deg, #EEF3FA 0%, ${BG} 100%)` }}>
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: PRI, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 10 }}>Outil d'estimation</div>
-          <h2 style={{ fontSize: 32, fontWeight: 900, margin: '0 0 12px' }}>Combien pouvez-vous emprunter ?</h2>
-          <p style={{ color: MUTED, fontSize: 15, maxWidth: 500, margin: '0 auto' }}>Utilisez notre simulateur pour estimer votre mensualité en quelques secondes.</p>
+          <h2 style={{ fontSize: 32, fontWeight: 900, margin: '0 0 12px' }}>Simulez votre plan d'épargne Semence</h2>
+          <p style={{ color: MUTED, fontSize: 15, maxWidth: 500, margin: '0 auto' }}>Choisissez votre plan, saisissez vos versements et découvrez votre bonus et vos revenus à l'échéance.</p>
         </div>
         <div style={{ maxWidth: 520, margin: '0 auto' }}>
           <Simulateur />
