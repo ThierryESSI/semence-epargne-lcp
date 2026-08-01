@@ -12,7 +12,8 @@ import prisma from '../utils/prisma';
 import { signAccessToken, signRefreshToken, verifyToken } from '../utils/jwt';
 
 export async function login(req: Request, res: Response) {
-  const { email, password } = req.body;
+  const email    = req.body.email || req.body.identifiant;
+  const password = req.body.password;
   if (!email || !password) return res.status(400).json({ error: 'Identifiant et mot de passe requis' });
 
   // [FIX 1] Recherche par email OU téléphone
