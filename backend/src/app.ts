@@ -24,6 +24,7 @@ import { errorHandler }   from './middleware/error.middleware';
 import { initSiteConfig } from './controllers/site_config.controller';
 
 const app = express();
+app.set('trust proxy', 1); // Derrière le reverse proxy Railway/Vercel
 
 // ── Sécurité ────────────────────────────────────────────────────────
 app.use(helmet({
@@ -39,6 +40,14 @@ app.use(rateLimit({ windowMs:15*60*1000, max:300, standardHeaders:true }));
 app.use(express.json({ limit:'10mb' }));
 app.use(express.urlencoded({ extended:true, limit:'10mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+// ── Health check (déclaré AVANT les routes pour rester public) ────
+app.get('/api/health', (_, res) => res.json({
+  status:  'OK',
+  service: 'Semence Epargne API',
+  version: '1.0.0',
+  domain:  'semenceep.ci',
+}));
 
 // ── Routes ────────────────────────────────────────────────────────
 app.use('/api/auth',          authRoutes);
@@ -56,14 +65,6 @@ app.use('/api/super-admin',   superAdminRoutes);
 app.use('/api/documents',     documentsRoutes);
 app.use('/api/rapports',      rapportRoutes);
 app.use('/api/site-config',   siteConfigRoutes);
-
-// ── Health check ──────────────────────────────────────────────────
-app.get('/api/health', (_, res) => res.json({
-  status:  'OK',
-  service: 'Semence Epargne API',
-  version: '1.0.0',
-  domain:  'semenceep.ci',
-}));
 
 app.use('*', (_, res) => res.status(404).json({ error: 'Route introuvable' }));
 app.use(errorHandler);

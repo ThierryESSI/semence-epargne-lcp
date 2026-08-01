@@ -11,6 +11,5 @@ import { authenticate } from '../middleware/auth.middleware';
 import { syncOfflineQueue } from '../controllers/sync.controller';
 
 const router = Router();
-router.use(authenticate);
-router.post('/sync', syncOfflineQueue);
+router.post('/sync', authenticate, syncOfflineQueue);
 export default router;
