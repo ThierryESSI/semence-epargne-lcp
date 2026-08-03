@@ -80,6 +80,13 @@ export default function GestionAdmins() {
     catch(e:any) { setError(e.response?.data?.error || 'Erreur'); }
   }
 
+  async function supprimerAdminUser(a:any) {
+    const label = `${a.prenom} ${a.nom} (${ROLE_LABELS[a.role]})`;
+    if (!confirm(`Supprimer DEFINITIVEMENT ${label} ?\n\nAttention : toutes ses donnees liees (comptes, transactions, conseillers, clients...) seront aussi supprimees. Cette action est irreversible.`)) return;
+    try { await api.delete(`/super-admin/users/${a.id}`); setSuccess(`${label} supprime`); load(); }
+    catch(e:any) { setError(e.response?.data?.error || 'Erreur'); }
+  }
+
   function tp(code:string, target:'form'|'edit') {
     if(target==='form') setForm(f=>({...f,permissions:f.permissions.includes(code)?f.permissions.filter(x=>x!==code):[...f.permissions,code]}));
     else setEditPerms(p=>p.includes(code)?p.filter(x=>x!==code):[...p,code]);
@@ -219,6 +226,10 @@ export default function GestionAdmins() {
                     <button onClick={()=>resetPwd(a.id,`${a.prenom} ${a.nom}`)}
                       style={{background:C.goldPale,color:'#a16207',border:'none',borderRadius:6,padding:'4px 8px',fontSize:11,fontWeight:600,cursor:'pointer'}}>
                       Mdp
+                    </button>
+                    <button onClick={()=>supprimerAdminUser(a)}
+                      style={{background:C.redPale,color:C.red,border:'none',borderRadius:6,padding:'4px 8px',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                      Supprimer
                     </button>
                   </div>}
                 </TD>

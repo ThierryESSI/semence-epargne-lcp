@@ -1,7 +1,7 @@
 // backend/src/routes/super_admin.routes.ts
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
-import { listerAdmins, creerAdmin, modifierPermissions, toggleAdmin, resetPasswordAdmin, supprimerAdmin, listePermissions } from '../controllers/super_admin.controller';
+import { listerAdmins, creerAdmin, modifierPermissions, toggleAdmin, resetPasswordAdmin, supprimerAdmin, listePermissions, supprimerClient, supprimerConseiller, supprimerDistributeur, supprimerUserExpert, viderClients } from '../controllers/super_admin.controller';
 
 const router = Router();
 router.use(authenticate);
@@ -16,5 +16,12 @@ router.patch('/admins/:userId/permissions', authorize('SUPER_ADMIN','ADMINS_MODI
 router.patch('/admins/:userId/toggle',      authorize('SUPER_ADMIN','ADMINS_MODIFIER'),  toggleAdmin);
 router.post('/admins/:userId/reset-pwd',    authorize('SUPER_ADMIN','ADMINS_MODIFIER'),  resetPasswordAdmin);
 router.delete('/admins/:userId',            authorize('SUPER_ADMIN','ADMINS_SUPPRIMER'), supprimerAdmin);
+
+// Suppressions expert (SuperAdmin / Master) — cascade complète
+router.delete('/clients',            authorize('SUPER_ADMIN','MASTER'), viderClients);
+router.delete('/clients/:id',        authorize('SUPER_ADMIN','MASTER'), supprimerClient);
+router.delete('/conseillers/:id',    authorize('SUPER_ADMIN','MASTER'), supprimerConseiller);
+router.delete('/distributeurs/:id',  authorize('SUPER_ADMIN','MASTER'), supprimerDistributeur);
+router.delete('/users/:userId',      authorize('SUPER_ADMIN','MASTER'), supprimerUserExpert);
 
 export default router;

@@ -8,6 +8,7 @@
 // frontend/src/pages/admin/Distributeurs.tsx
 import { useState } from 'react';
 import { api } from '../../lib/api';
+import { useAuthStore } from '../../lib/store';
 import { usePaginated } from '../../hooks/useData';
 import { C } from '../../lib/design';
 import { PageHeader, SearchBar, TableWrapper, THead, TR, TD, Badge, Modal, FormGrid, Input, Select, Btn, Spinner, Empty, Pagination, Alert, Icon, ICONS, SectionLabel } from '../../components/ui/DS';
@@ -15,6 +16,8 @@ import { formatMontant } from '../../lib/utils';
 
 export default function Distributeurs() {
   const { items, pagination, loading, page, setPage, search, setSearch, refetch } = usePaginated<any>('/distributeurs');
+  const { user: me } = useAuthStore();
+  const isExpert = me?.role === 'SUPER_ADMIN' || me?.role === 'MASTER';
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -35,6 +38,16 @@ export default function Distributeurs() {
   }
   function reset() { setShowModal(false); setSuccess(null); setError(''); setForm({ nom:'',prenom:'',email:'',telephone:'',password:'',nomEntreprise:'',ville:'',pays:"Côte d'Ivoire",type:'INTERNE' }); }
 
+  async function handleDelete(d: any) {
+    if (!confirm(`Supprimer DEFINITIVEMENT le distributeur ${d.nomEntreprise} (${d.code}) ?\n\nSes conseillers, leurs clients, cartes et comptes seront aussi supprimes.`)) return;
+    try {
+      await api.delete(`/super-admin/distributeurs/${d.id}`);
+      refetch();
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Erreur');
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Distributeurs" subtitle={`${pagination.total} distributeur(s) enregistré(s)`}
@@ -42,10 +55,10 @@ export default function Distributeurs() {
       <div style={{ marginBottom: 16 }}><SearchBar value={search} onChange={(v: string) => { setSearch(v); setPage(1); }} placeholder="Rechercher..."/></div>
 
       <TableWrapper>
-        <THead cols={['Distributeur','Code','Type','Ville','Conseillers','Statut']}/>
+        <THead cols={['Distributeur','Code','Type','Ville','Conseillers','Statut','']}/>
         <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner/></td></tr>
-          : items.length === 0 ? <tr><td colSpan={6}><Empty msg="Aucun distributeur. Créez-en un."/></td></tr>
+          {loading ? <tr><td colSpan={7}><Spinner/></td></tr>
+          : items.length === 0 ? <tr><td colSpan={7}><Empty msg="Aucun distributeur. Créez-en un."/></td></tr>
           : items.map((d: any) => (
             <TR key={d.id}>
               <TD>
@@ -59,6 +72,14 @@ export default function Distributeurs() {
               <TD muted><span style={{display:'flex',alignItems:'center',gap:4}}><Icon d={ICONS.map} size={13} color={C.textMuted}/>{d.ville}</span></TD>
               <TD muted><span style={{display:'flex',alignItems:'center',gap:4}}><Icon d={ICONS.clients} size={13} color={C.textMuted}/>{d._count?.conseillers || 0}</span></TD>
               <TD><Badge v={d.user?.actif ? 'actif' : 'suspendu'}/></TD>
+              <TD>
+                {isExpert && (
+                  <button onClick={() => handleDelete(d)} title="Supprimer le distributeur"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.red, padding: 4 }}>
+                    <Icon d={ICONS.trash} size={16} />
+                  </button>
+                )}
+              </TD>
             </TR>
           ))}
         </tbody>

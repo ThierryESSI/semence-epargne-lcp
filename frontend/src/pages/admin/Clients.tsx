@@ -8,6 +8,7 @@
 // frontend/src/pages/admin/Clients.tsx
 import { useState } from 'react';
 import { api } from '../../lib/api';
+import { useAuthStore } from '../../lib/store';
 import { usePaginated, useApi } from '../../hooks/useData';
 import { C } from '../../lib/design';
 import { PageHeader, SearchBar, TableWrapper, THead, TR, TD, Badge, Modal, SectionLabel, FormGrid, Input, Select, Btn, Spinner, Empty, Pagination, Alert, Icon, ICONS } from '../../components/ui/DS';
@@ -15,6 +16,8 @@ import { formatMontant, formatDate } from '../../lib/utils';
 
 export default function Clients() {
   const { items, pagination, loading, page, setPage, search, setSearch, refetch } = usePaginated<any>('/clients');
+  const { user: me } = useAuthStore();
+  const isExpert = me?.role === 'SUPER_ADMIN' || me?.role === 'MASTER';
   // Charger les conseillers disponibles pour le select
   const { data: conseillerData } = useApi<any>('/conseillers?limit=100');
   const conseillerList = conseillerData?.data || [];
@@ -60,12 +63,40 @@ export default function Clients() {
     setForm({ nom: '', prenom: '', telephone: '', email: '', dateNaissance: '', cni: '', region: '', departement: '', commune: '', typeCompte: 'ORDINAIRE', conseillerId: '' });
   }
 
+  async function handleDelete(c: any) {
+    if (!confirm(`Supprimer DEFINITIVEMENT le client ${c.user?.prenom || ''} ${c.user?.nom || ''} (${c.code}) ?\n\nSon compte, ses transactions et toutes ses donnees seront supprimes.`)) return;
+    try {
+      await api.delete(`/super-admin/clients/${c.id}`);
+      refetch();
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Erreur');
+    }
+  }
+
+  async function viderClients() {
+    if (!confirm('Supprimer TOUS les clients de la base ?\n\nCette action est irreversible. Les comptes, transactions et donnees de tous les clients seront supprimes.')) return;
+    try {
+      const { data } = await api.delete('/super-admin/clients');
+      alert(data.message || 'Base clients videe');
+      refetch();
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Erreur');
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Clients"
         subtitle={`${pagination.total} client(s) enregistré(s)`}
-        action={<Btn onClick={() => setShowModal(true)}><Icon d={ICONS.clients} size={15} color="#fff" /> Nouveau client</Btn>}
+        action={
+          <div style={{ display: 'flex', gap: 8 }}>
+            {isExpert && (
+              <Btn variant="danger" onClick={viderClients}><Icon d={ICONS.trash} size={15} color="#fff" /> Vider les clients</Btn>
+            )}
+            <Btn onClick={() => setShowModal(true)}><Icon d={ICONS.clients} size={15} color="#fff" /> Nouveau client</Btn>
+          </div>
+        }
       />
 
       <div style={{ marginBottom: 16 }}>
@@ -98,9 +129,17 @@ export default function Clients() {
                 <TD><Badge v={c.compte?.statut || 'en_attente'} /></TD>
                 <TD muted>{formatDate(c.user?.createdAt, 'dd/MM/yyyy')}</TD>
                 <TD>
-                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, padding: 4 }}>
-                    <Icon d={ICONS.eye} size={16} />
-                  </button>
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, padding: 4 }}>
+                      <Icon d={ICONS.eye} size={16} />
+                    </button>
+                    {isExpert && (
+                      <button onClick={() => handleDelete(c)} title="Supprimer"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.red, padding: 4 }}>
+                        <Icon d={ICONS.trash} size={16} />
+                      </button>
+                    )}
+                  </div>
                 </TD>
               </TR>
             ))

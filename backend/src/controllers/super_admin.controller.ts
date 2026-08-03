@@ -206,3 +206,174 @@ export async function supprimerAdmin(req: Request, res: Response) {
 export async function listePermissions(_req: Request, res: Response) {
   return res.json({ data: MODULES_PERMISSIONS });
 }
+
+// ════════════════════════════════════════════════════════════════════
+// SUPPRESSIONS EXPERT — SuperAdmin / Master
+// Cascade complète : compte, transactions, plans, virements, cartes,
+// fiches (client/conseiller/distributeur), notifications, documents.
+// ════════════════════════════════════════════════════════════════════
+
+async function supprimerCompteEtFinances(compteIds: string[]) {
+  if (compteIds.length === 0) return;
+  await prisma.virement.deleteMany({
+    where: { OR: [{ compteSourceId: { in: compteIds } }, { compteDestId: { in: compteIds } }] },
+  });
+  const plans = await prisma.planEpargne.findMany({ where: { compteId: { in: compteIds } }, select: { id: true } });
+  if (plans.length > 0) {
+    await prisma.versementEpargne.deleteMany({ where: { planId: { in: plans.map(p => p.id) } } });
+    await prisma.planEpargne.deleteMany({ where: { compteId: { in: compteIds } } });
+  }
+  await prisma.transaction.deleteMany({ where: { compteId: { in: compteIds } } });
+  await prisma.compte.deleteMany({ where: { id: { in: compteIds } } });
+}
+
+// Supprime un user UNIQUEMENT s'il n'a plus aucune fiche (client/conseiller/distributeur)
+async function supprimerUserSiOrphelin(userId: string) {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { _count: { select: { clients: true, conseillers: true, distributeurs: true } } },
+  });
+  if (u && u._count.clients + u._count.conseillers + u._count.distributeurs === 0)
+    await supprimerUserComplet(userId);
+}
+
+// Suppression TOTALE d'un user et de tout son arbre de données
+async function supprimerUserComplet(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return;
+
+  // Fiches client directes
+  await prisma.client.deleteMany({ where: { userId } });
+
+  // Fiches conseiller → leurs clients + cartes
+  const conseillers = await prisma.conseiller.findMany({ where: { userId }, select: { id: true } });
+  for (const c of conseillers) {
+    const childClients = await prisma.client.findMany({ where: { conseillerId: c.id }, select: { userId: true } });
+    await prisma.carte.updateMany({ where: { conseillerId: c.id }, data: { conseillerId: null } });
+    await prisma.client.deleteMany({ where: { conseillerId: c.id } });
+    for (const cc of childClients) await supprimerUserSiOrphelin(cc.userId);
+  }
+  await prisma.conseiller.deleteMany({ where: { userId } });
+
+  // Fiches distributeur → agences + cartes + conseillers (et leurs clients)
+  const distributeurs = await prisma.distributeur.findMany({ where: { userId }, select: { id: true } });
+  for (const d of distributeurs) {
+    await prisma.distributeur.updateMany({ where: { parentDistributeurId: d.id }, data: { parentDistributeurId: null } });
+    await prisma.carte.updateMany({ where: { distributeurId: d.id }, data: { distributeurId: null } });
+    const dCons = await prisma.conseiller.findMany({ where: { distributeurId: d.id }, select: { id: true, userId: true } });
+    for (const dc of dCons) {
+      const childClients = await prisma.client.findMany({ where: { conseillerId: dc.id }, select: { userId: true } });
+      await prisma.carte.updateMany({ where: { conseillerId: dc.id }, data: { conseillerId: null } });
+      await prisma.client.deleteMany({ where: { conseillerId: dc.id } });
+      for (const cc of childClients) await supprimerUserSiOrphelin(cc.userId);
+      await prisma.conseiller.delete({ where: { id: dc.id } });
+      await supprimerUserSiOrphelin(dc.userId);
+    }
+  }
+  await prisma.distributeur.deleteMany({ where: { userId } });
+
+  // Comptes + finances
+  const comptes = await prisma.compte.findMany({ where: { userId }, select: { id: true } });
+  await supprimerCompteEtFinances(comptes.map(c => c.id));
+
+  // Divers
+  await prisma.notification.deleteMany({ where: { userId } });
+  await prisma.document.deleteMany({ where: { userId } });
+  await prisma.auditLog.deleteMany({ where: { actorId: userId } });
+  await prisma.user.delete({ where: { id: userId } });
+}
+
+async function traceAudit(action: string, entite: string, entiteId: string, actorId: string, details?: any) {
+  await prisma.auditLog.create({ data: { action, entite, entiteId, actorId, details } });
+}
+
+export async function supprimerClient(req: Request, res: Response) {
+  try {
+    const client = await prisma.client.findUnique({ where: { id: req.params.id } });
+    if (!client) return res.status(404).json({ error: 'Client introuvable' });
+    if (client.userId === req.user!.userId)
+      return res.status(403).json({ error: 'Impossible de supprimer votre propre compte' });
+    await prisma.client.delete({ where: { id: client.id } });
+    await supprimerUserSiOrphelin(client.userId);
+    await traceAudit('SUPPRESSION_CLIENT', 'Client', client.id, req.user!.userId, { code: client.code });
+    return res.json({ success: true, message: 'Client supprimé' });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
+export async function supprimerConseiller(req: Request, res: Response) {
+  try {
+    const conseiller = await prisma.conseiller.findUnique({ where: { id: req.params.id } });
+    if (!conseiller) return res.status(404).json({ error: 'Conseiller introuvable' });
+    if (conseiller.userId === req.user!.userId)
+      return res.status(403).json({ error: 'Impossible de supprimer votre propre compte' });
+
+    const childClients = await prisma.client.findMany({ where: { conseillerId: conseiller.id }, select: { userId: true } });
+    await prisma.carte.updateMany({ where: { conseillerId: conseiller.id }, data: { conseillerId: null } });
+    await prisma.client.deleteMany({ where: { conseillerId: conseiller.id } });
+    for (const cc of childClients) await supprimerUserSiOrphelin(cc.userId);
+    await prisma.conseiller.delete({ where: { id: conseiller.id } });
+    await supprimerUserSiOrphelin(conseiller.userId);
+
+    await traceAudit('SUPPRESSION_CONSEILLER', 'Conseiller', conseiller.id, req.user!.userId, { code: conseiller.code });
+    return res.json({ success: true, message: 'Conseiller supprimé' });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
+export async function supprimerDistributeur(req: Request, res: Response) {
+  try {
+    const d = await prisma.distributeur.findUnique({ where: { id: req.params.id } });
+    if (!d) return res.status(404).json({ error: 'Distributeur introuvable' });
+    if (d.userId === req.user!.userId)
+      return res.status(403).json({ error: 'Impossible de supprimer votre propre compte' });
+
+    await prisma.distributeur.updateMany({ where: { parentDistributeurId: d.id }, data: { parentDistributeurId: null } });
+    await prisma.carte.updateMany({ where: { distributeurId: d.id }, data: { distributeurId: null } });
+    const dCons = await prisma.conseiller.findMany({ where: { distributeurId: d.id }, select: { id: true, userId: true } });
+    for (const dc of dCons) {
+      const childClients = await prisma.client.findMany({ where: { conseillerId: dc.id }, select: { userId: true } });
+      await prisma.carte.updateMany({ where: { conseillerId: dc.id }, data: { conseillerId: null } });
+      await prisma.client.deleteMany({ where: { conseillerId: dc.id } });
+      for (const cc of childClients) await supprimerUserSiOrphelin(cc.userId);
+      await prisma.conseiller.delete({ where: { id: dc.id } });
+      await supprimerUserSiOrphelin(dc.userId);
+    }
+    await prisma.distributeur.delete({ where: { id: d.id } });
+    await supprimerUserSiOrphelin(d.userId);
+
+    await traceAudit('SUPPRESSION_DISTRIBUTEUR', 'Distributeur', d.id, req.user!.userId, { code: d.code });
+    return res.json({ success: true, message: 'Distributeur supprimé' });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
+// Suppression TOTALE d'un utilisateur (master, distributeur, conseiller, client)
+export async function supprimerUserExpert(req: Request, res: Response) {
+  try {
+    const { userId } = req.params;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    if (user.id === req.user!.userId)
+      return res.status(403).json({ error: 'Impossible de supprimer votre propre compte' });
+    if (user.role === 'SUPER_ADMIN')
+      return res.status(403).json({ error: 'Le compte SuperAdmin ne peut pas être supprimé' });
+
+    await supprimerUserComplet(userId);
+    await traceAudit('SUPPRESSION_USER', 'User', userId, req.user!.userId, { email: user.email, role: user.role });
+    return res.json({ success: true, message: `Compte ${user.role} et toutes ses données supprimés` });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}
+
+// Vide TOUS les clients (fiches + comptes utilisateurs orphelins de rôle CLIENT)
+export async function viderClients(req: Request, res: Response) {
+  try {
+    const users = await prisma.user.findMany({ where: { role: 'CLIENT' }, select: { id: true, email: true } });
+    let supprimes = 0;
+    for (const u of users) {
+      if (u.id === req.user!.userId) continue;
+      await prisma.client.deleteMany({ where: { userId: u.id } });
+      await supprimerUserSiOrphelin(u.id);
+      supprimes++;
+    }
+    await traceAudit('VIDAGE_CLIENTS', 'Client', 'ALL', req.user!.userId, { comptesTraites: supprimes });
+    return res.json({ success: true, message: `${supprimes} compte(s) client nettoyé(s)` });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+}

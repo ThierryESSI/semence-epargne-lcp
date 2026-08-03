@@ -8,6 +8,7 @@
 // frontend/src/pages/admin/Conseillers.tsx
 import { useState } from 'react';
 import { api } from '../../lib/api';
+import { useAuthStore } from '../../lib/store';
 import { usePaginated, useApi } from '../../hooks/useData';
 import { C } from '../../lib/design';
 import { PageHeader, SearchBar, TableWrapper, THead, TR, TD, Badge, Modal, FormGrid, Input, Select, Btn, Spinner, Empty, Pagination, Alert, Icon, ICONS, SectionLabel } from '../../components/ui/DS';
@@ -15,6 +16,8 @@ import { formatMontant } from '../../lib/utils';
 
 export default function Conseillers() {
   const { items, pagination, loading, page, setPage, search, setSearch, refetch } = usePaginated<any>('/conseillers');
+  const { user: me } = useAuthStore();
+  const isExpert = me?.role === 'SUPER_ADMIN' || me?.role === 'MASTER';
   const { data: distribData } = useApi<any>('/distributeurs?limit=100');
   const distribList = distribData?.data || [];
 
@@ -40,6 +43,16 @@ export default function Conseillers() {
   }
   function reset() { setShowModal(false); setSuccess(null); setError(''); setForm({ nom:'',prenom:'',telephone:'',email:'',password:'',type:'STAND',region:'',commune:'',distributeurId:'' }); }
 
+  async function handleDelete(c: any) {
+    if (!confirm(`Supprimer DEFINITIVEMENT le conseiller ${c.user?.prenom || ''} ${c.user?.nom || ''} (${c.code}) ?\n\nSes clients et donnees liees seront aussi supprimes.`)) return;
+    try {
+      await api.delete(`/super-admin/conseillers/${c.id}`);
+      refetch();
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Erreur');
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Conseillers Clientèle" subtitle={`${pagination.total} conseiller(s) actif(s)`}
@@ -52,10 +65,10 @@ export default function Conseillers() {
 
       <div style={{ marginTop: distribList.length === 0 ? 12 : 0 }}>
         <TableWrapper>
-          <THead cols={['Conseiller','Code','Type','Distributeur','Clients','Commission (FCFA)']}/>
+          <THead cols={['Conseiller','Code','Type','Distributeur','Clients','Commission (FCFA)','']}/>
           <tbody>
-            {loading ? <tr><td colSpan={6}><Spinner/></td></tr>
-            : items.length === 0 ? <tr><td colSpan={6}><Empty msg="Aucun conseiller. Créez-en un."/></td></tr>
+            {loading ? <tr><td colSpan={7}><Spinner/></td></tr>
+            : items.length === 0 ? <tr><td colSpan={7}><Empty msg="Aucun conseiller. Créez-en un."/></td></tr>
             : items.map((c: any) => (
               <TR key={c.id}>
                 <TD>
@@ -72,6 +85,14 @@ export default function Conseillers() {
                 <TD muted>{c.distributeur?.nomEntreprise || '—'}</TD>
                 <TD bold>{c._count?.clients || 0}</TD>
                 <TD bold>{formatMontant(0)}</TD>
+                <TD>
+                  {isExpert && (
+                    <button onClick={() => handleDelete(c)} title="Supprimer le conseiller"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.red, padding: 4 }}>
+                      <Icon d={ICONS.trash} size={16} />
+                    </button>
+                  )}
+                </TD>
               </TR>
             ))}
           </tbody>
