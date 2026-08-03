@@ -50,6 +50,16 @@ app.get('/api/health', (_, res) => res.json({
   domain:  'semenceep.ci',
 }));
 
+// ── Diagnostic temporaire SMS (à retirer après validation) ────────
+app.get('/api/debug/sms-config', (_, res) => {
+  res.json({
+    smsKeyConfigured: Boolean(process.env.SMS_SPKEY),
+    smsKeyPrefix:     (process.env.SMS_SPKEY || '').slice(0, 4) + '…' + (process.env.SMS_SPKEY || '').slice(-4),
+    smsApiUrl:        process.env.SMS_API_URL || '(défaut: https://www.specialsms.net/mysmsplus/envoyersms.php)',
+    nodeEnv:          process.env.NODE_ENV || 'non défini',
+  });
+});
+
 // ── Routes ────────────────────────────────────────────────────────
 app.use('/api/auth',          authRoutes);
 app.use('/api/comptes',       comptesRoutes);
