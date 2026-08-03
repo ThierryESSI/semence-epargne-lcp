@@ -66,9 +66,9 @@ export async function getMe(req: Request, res: Response) {
     select:{
       id:true, email:true, nom:true, prenom:true, role:true, telephone:true, actif:true, createdAt:true,
       compte:{ select:{ numeroCompte:true, rib:true, solde:true, type:true, statut:true } },
-      client:{ select:{ code:true, region:true, ville:true, commune:true } },
-      conseiller:{ select:{ code:true, type:true } },
-      distributeur:{ select:{ code:true, nomEntreprise:true, type:true } },
+      clients:{ select:{ code:true, region:true, ville:true, commune:true } },
+      conseillers:{ select:{ code:true, type:true } },
+      distributeurs:{ select:{ code:true, nomEntreprise:true, type:true } },
     }
   });
   if (!user) return res.status(404).json({ error:'Utilisateur introuvable' });

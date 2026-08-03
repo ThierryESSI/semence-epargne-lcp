@@ -11,6 +11,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
 import { generateCodeActeur } from '../utils/crypto';
 import { Role } from '@prisma/client';
+import { upgradeRole, mergePermissions, PERMISSIONS_CONSEILLER } from '../utils/roles';
 
 export async function creerConseiller(req: Request, res: Response) {
   try {
@@ -22,48 +23,71 @@ export async function creerConseiller(req: Request, res: Response) {
     if (!nom)       manquants.push('nom');
     if (manquants.length > 0) return res.status(400).json({ error: `Champs manquants : ${manquants.join(', ')}` });
 
-    if (telephone) {
-      const ex = await prisma.user.findUnique({ where: { telephone } });
-      if (ex) return res.status(409).json({ error: `Le téléphone ${telephone} est déjà utilisé` });
-    }
-    if (email) {
-      const ex = await prisma.user.findUnique({ where: { email } });
-      if (ex) return res.status(409).json({ error: `L'email ${email} est déjà utilisé` });
-    }
-
     // Résoudre distributeurId
     let distributeurId = distIdBody;
     if (!distributeurId && (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE')) {
-      const d = await prisma.distributeur.findUnique({ where: { userId: req.user!.userId } });
+      const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
       distributeurId = d?.id;
     }
     if (!distributeurId) {
       return res.status(400).json({ error: 'distributeurId requis. Sélectionnez un distributeur.' });
     }
 
-    // Email optionnel
+    const count = await prisma.conseiller.count();
+    const seq   = count + 1;
+    const code  = generateCodeActeur('CC', seq);
+
+    // ── Réutilisation d'un compte existant (1 personne = 1 compte) ──
+    const existingUser = await prisma.user.findUnique({ where: { telephone } });
+    const userParEmail = !existingUser && email ? await prisma.user.findUnique({ where: { email } }) : null;
+    const user = existingUser || userParEmail;
+
+    if (user) {
+      const dejaConseiller = await prisma.conseiller.findFirst({ where: { userId: user.id } });
+      if (dejaConseiller)
+        return res.status(409).json({ error: `${user.prenom || ''} ${user.nom} est déjà conseiller (${dejaConseiller.code})` });
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: upgradeRole(user.role, Role.CONSEILLER) as Role, permissions: mergePermissions(user.permissions as string[], PERMISSIONS_CONSEILLER) as any }
+      });
+      await prisma.conseiller.create({
+        data: { code, type: type as any, region, departement, commune, codeStand, distributeurId, caution: caution ? parseFloat(caution) : null, userId: user.id }
+      });
+      const hasCompte = await prisma.compte.findFirst({ where: { userId: user.id } });
+      if (!hasCompte)
+        await prisma.compte.create({ data: { numeroCompte: `${code}-CPT`, rib: `RI-${code}-CPT`, type: 'ORDINAIRE', statut: 'ACTIF', userId: user.id } });
+
+      await prisma.auditLog.create({ data: { action: 'CREATION_CONSEILLER', entite: 'Conseiller', entiteId: user.id, actorId: req.user!.userId, details: { code, compteReutilise: true } } });
+      return res.status(201).json({ success: true, message: 'Conseiller ajouté au compte existant', data: { code, email: user.email, telephone: user.telephone } });
+    }
+
+    // ── Nouveau compte ──────────────────────────────────────────────
+    if (email) {
+      const ex = await prisma.user.findUnique({ where: { email } });
+      if (ex) return res.status(409).json({ error: `L'email ${email} est déjà utilisé` });
+    }
+
     const emailFinal = email || `${telephone.replace(/\D/g, '')}@semence-noemail.ci`;
 
-    const count = await prisma.conseiller.count();
-    const code  = generateCodeActeur('CC', count + 1);
-
-    const user = await prisma.user.create({
+    const newUser = await prisma.user.create({
       data: {
         email: emailFinal, telephone,
         passwordHash: await bcrypt.hash(password, 12),
         nom: nom.toUpperCase().trim(),
         prenom: (prenom || '-').trim(),
-        role: Role.CONSEILLER, actif: true
+        role: Role.CONSEILLER, actif: true,
+        permissions: PERMISSIONS_CONSEILLER as any,
       }
     });
 
-    await prisma.compte.create({ data: { numeroCompte: `${code}-CPT`, rib: `RI-${code}-CPT`, type: 'ORDINAIRE', statut: 'ACTIF', userId: user.id } });
+    await prisma.compte.create({ data: { numeroCompte: `${code}-CPT`, rib: `RI-${code}-CPT`, type: 'ORDINAIRE', statut: 'ACTIF', userId: newUser.id } });
     await prisma.conseiller.create({
-      data: { code, type: type as any, region, departement, commune, codeStand, distributeurId, caution: caution ? parseFloat(caution) : null, userId: user.id }
+      data: { code, type: type as any, region, departement, commune, codeStand, distributeurId, caution: caution ? parseFloat(caution) : null, userId: newUser.id }
     });
 
     await prisma.auditLog.create({
-      data: { action: 'CREATION_CONSEILLER', entite: 'Conseiller', entiteId: user.id, actorId: req.user!.userId, details: { code } }
+      data: { action: 'CREATION_CONSEILLER', entite: 'Conseiller', entiteId: newUser.id, actorId: req.user!.userId, details: { code } }
     });
 
     return res.status(201).json({ success: true, message: 'Conseiller créé avec succès', data: { code, email: emailFinal, telephone } });
@@ -83,8 +107,8 @@ export async function listerConseillers(req: Request, res: Response) {
   const limit = parseInt(req.query.limit as string || '20');
 
   const where: any = {};
-  if (req.user!.role !== 'MASTER') {
-    const d = await prisma.distributeur.findUnique({ where: { userId: req.user!.userId } });
+  if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
+    const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
     if (d) where.distributeurId = d.id;
   }
 

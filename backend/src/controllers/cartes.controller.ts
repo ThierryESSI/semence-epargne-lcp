@@ -174,10 +174,10 @@ export async function listerCartes(req: Request, res: Response) {
   const where: any = {};
   if (statut) where.statut = statut;
   if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
-    const d = await prisma.distributeur.findUnique({ where:{ userId:req.user!.userId } });
+    const d = await prisma.distributeur.findFirst({ where:{ userId:req.user!.userId } });
     if (d) where.distributeurId = d.id;
   } else if (req.user!.role === 'CONSEILLER') {
-    const c = await prisma.conseiller.findUnique({ where:{ userId:req.user!.userId } });
+    const c = await prisma.conseiller.findFirst({ where:{ userId:req.user!.userId } });
     if (c) where.conseillerId = c.id;
   }
   const [total, cartes] = await Promise.all([

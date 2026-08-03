@@ -32,14 +32,14 @@ export async function listerTransactions(req: Request, res: Response) {
     const compte = await prisma.compte.findUnique({ where: { userId: req.user!.userId } });
     if (compte) where.compteId = compte.id;
   } else if (role === 'CONSEILLER') {
-    const c = await prisma.conseiller.findUnique({ where: { userId: req.user!.userId } });
+    const c = await prisma.conseiller.findFirst({ where: { userId: req.user!.userId } });
     if (c) {
       const clients = await prisma.client.findMany({ where: { conseillerId: c.id }, select: { userId: true } });
       const comptes = await prisma.compte.findMany({ where: { userId: { in: clients.map(x => x.userId) } }, select: { id: true } });
       where.compteId = { in: comptes.map(x => x.id) };
     }
   } else if (role === 'DISTRIBUTEUR_INTERNE' || role === 'DISTRIBUTEUR_AGREE') {
-    const d = await prisma.distributeur.findUnique({ where: { userId: req.user!.userId } });
+    const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
     if (d) {
       const conseillers = await prisma.conseiller.findMany({ where: { distributeurId: d.id }, select: { id: true } });
       const clients = await prisma.client.findMany({ where: { conseillerId: { in: conseillers.map(x => x.id) } }, select: { userId: true } });

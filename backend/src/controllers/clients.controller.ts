@@ -18,10 +18,10 @@ export async function listerClients(req: Request, res: Response) {
   const where: any = {};
 
   if (role === 'CONSEILLER') {
-    const c = await prisma.conseiller.findUnique({ where: { userId: req.user!.userId } });
+    const c = await prisma.conseiller.findFirst({ where: { userId: req.user!.userId } });
     if (c) where.conseillerId = c.id;
   } else if (role === 'DISTRIBUTEUR_INTERNE' || role === 'DISTRIBUTEUR_AGREE') {
-    const d = await prisma.distributeur.findUnique({ where: { userId: req.user!.userId } });
+    const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
     if (d) {
       const conseillers = await prisma.conseiller.findMany({ where: { distributeurId: d.id }, select: { id: true } });
       where.conseillerId = { in: conseillers.map(c => c.id) };

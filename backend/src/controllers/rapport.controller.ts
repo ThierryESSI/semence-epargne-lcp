@@ -170,7 +170,7 @@ export async function exporterDonnees(req: Request, res: Response) {
         where: { role:'CLIENT' },
         select: { nom:true, prenom:true, telephone:true, createdAt:true,
           compte: { select:{ numeroCompte:true, rib:true, solde:true, statut:true } },
-          client: { select:{ region:true, ville:true, commune:true } } },
+          clients: { select:{ region:true, ville:true, commune:true } } },
         orderBy: { createdAt:'desc' }
       });
     } else if (type === 'transactions') {

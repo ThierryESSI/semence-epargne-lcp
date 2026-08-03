@@ -60,7 +60,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
 
     let conseillerId = conseillerIdBody;
     if (!conseillerId && req.user!.role === 'CONSEILLER') {
-      const c = await prisma.conseiller.findUnique({ where:{ userId:req.user!.userId } });
+      const c = await prisma.conseiller.findFirst({ where:{ userId:req.user!.userId } });
       conseillerId = c?.id;
     }
     if (!conseillerId) {

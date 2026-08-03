@@ -4,19 +4,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
 import { generateCodeActeur } from '../utils/crypto';
 import { Role, TypeDistributeur } from '@prisma/client';
-
-const PERMISSIONS_DEFAUT = [
-  'DISTRIBUTEURS_VOIR',
-  'CONSEILLERS_VOIR',
-  'CONSEILLERS_AJOUTER',
-  'CARTES_VOIR',
-  'CARTES_ATTRIBUER',
-  'CLIENTS_VOIR',
-  'CLIENTS_AJOUTER',
-  'TRANSACTIONS_VOIR',
-  'VIREMENTS_VOIR',
-  'VIREMENTS_VALIDER',
-];
+import { upgradeRole, mergePermissions, PERMISSIONS_DISTRIBUTEUR } from '../utils/roles';
 
 export async function creerDistributeur(req: Request, res: Response) {
   try {
@@ -33,53 +21,79 @@ export async function creerDistributeur(req: Request, res: Response) {
     if (type !== 'INTERNE' && type !== 'AGREE')
       return res.status(400).json({ error: "Type invalide. Valeurs : INTERNE, AGREE" });
 
-    if (telephone) {
-      const ex = await prisma.user.findUnique({ where: { telephone } });
-      if (ex) return res.status(409).json({ error: `Le téléphone ${telephone} est déjà utilisé` });
-    }
-    if (email) {
-      const ex = await prisma.user.findUnique({ where: { email } });
-      if (ex) return res.status(409).json({ error: `L'email ${email} est déjà utilisé` });
-    }
+    const role: Role = type === 'INTERNE' ? Role.DISTRIBUTEUR_INTERNE : Role.DISTRIBUTEUR_AGREE;
 
     // Un distributeur (non MASTER) ne crée que ses propres agences
     let parentId = parentDistributeurId || null;
     if (!parentId && (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE')) {
-      const d = await prisma.distributeur.findUnique({ where: { userId: req.user!.userId } });
+      const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
       parentId = d?.id || null;
     }
-
-    const emailFinal = email || `${telephone.replace(/\D/g, '')}@semence-noemail.ci`;
 
     const count = await prisma.distributeur.count();
     const seq   = count + 1;
     const code  = generateCodeActeur(type === 'INTERNE' ? 'DI' : 'DA', seq);
 
-    const role: Role = type === 'INTERNE' ? Role.DISTRIBUTEUR_INTERNE : Role.DISTRIBUTEUR_AGREE;
+    // ── Réutilisation d'un compte existant (1 personne = 1 compte) ──
+    const existingUser = telephone
+      ? await prisma.user.findUnique({ where: { telephone } })
+      : null;
+    const userParEmail = !existingUser && email
+      ? await prisma.user.findUnique({ where: { email } })
+      : null;
+    const user = existingUser || userParEmail;
 
-    const user = await prisma.user.create({
+    if (user) {
+      const dejaDistrib = await prisma.distributeur.findFirst({ where: { userId: user.id } });
+      if (dejaDistrib)
+        return res.status(409).json({ error: `${user.prenom || ''} ${user.nom} est déjà distributeur (${dejaDistrib.code})` });
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: upgradeRole(user.role, role) as Role, permissions: mergePermissions(user.permissions as string[], PERMISSIONS_DISTRIBUTEUR) as any }
+      });
+      await prisma.distributeur.create({
+        data: { code, type: type as TypeDistributeur, nomEntreprise: nomEntreprise.trim(), pays: pays || 'CI', ville: ville.trim(), caution: caution ? parseFloat(caution) : null, parentDistributeurId: parentId, userId: user.id }
+      });
+      const hasCompte = await prisma.compte.findFirst({ where: { userId: user.id } });
+      if (!hasCompte)
+        await prisma.compte.create({ data: { numeroCompte: `${code}-CPT`, rib: `RI-${code}-CPT`, type: 'ORDINAIRE', statut: 'ACTIF', userId: user.id } });
+
+      await prisma.auditLog.create({ data: { action: 'CREATION_DISTRIBUTEUR', entite: 'Distributeur', entiteId: user.id, actorId: req.user!.userId, details: { code, type, compteReutilise: true } } });
+      return res.status(201).json({ success: true, message: 'Distributeur ajouté au compte existant', data: { code, email: user.email, telephone: user.telephone } });
+    }
+
+    // ── Nouveau compte ──────────────────────────────────────────────
+    if (email) {
+      const ex = await prisma.user.findUnique({ where: { email } });
+      if (ex) return res.status(409).json({ error: `L'email ${email} est déjà utilisé` });
+    }
+
+    const emailFinal = email || `${telephone.replace(/\D/g, '')}@semence-noemail.ci`;
+
+    const newUser = await prisma.user.create({
       data: {
         email: emailFinal, telephone,
         passwordHash: await bcrypt.hash(password, 12),
         nom: nom.toUpperCase().trim(),
         prenom: (prenom || '-').trim(),
         role, actif: true,
-        permissions: PERMISSIONS_DEFAUT as any,
+        permissions: PERMISSIONS_DISTRIBUTEUR as any,
       }
     });
 
-    await prisma.compte.create({ data: { numeroCompte: `${code}-CPT`, rib: `RI-${code}-CPT`, type: 'ORDINAIRE', statut: 'ACTIF', userId: user.id } });
+    await prisma.compte.create({ data: { numeroCompte: `${code}-CPT`, rib: `RI-${code}-CPT`, type: 'ORDINAIRE', statut: 'ACTIF', userId: newUser.id } });
     await prisma.distributeur.create({
       data: {
         code, type: type as TypeDistributeur, nomEntreprise: nomEntreprise.trim(),
         pays: pays || 'CI', ville: ville.trim(),
         caution: caution ? parseFloat(caution) : null,
-        parentDistributeurId: parentId, userId: user.id,
+        parentDistributeurId: parentId, userId: newUser.id,
       }
     });
 
     await prisma.auditLog.create({
-      data: { action: 'CREATION_DISTRIBUTEUR', entite: 'Distributeur', entiteId: user.id, actorId: req.user!.userId, details: { code, type } }
+      data: { action: 'CREATION_DISTRIBUTEUR', entite: 'Distributeur', entiteId: newUser.id, actorId: req.user!.userId, details: { code, type } }
     });
 
     return res.status(201).json({ success: true, message: 'Distributeur créé avec succès', data: { code, email: emailFinal, telephone } });
@@ -101,7 +115,7 @@ export async function listerDistributeurs(req: Request, res: Response) {
 
   const where: any = {};
   if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
-    const d = await prisma.distributeur.findUnique({ where: { userId: req.user!.userId } });
+    const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
     where.parentDistributeurId = d?.id || '__AUCUN__';
   }
   if (search) {

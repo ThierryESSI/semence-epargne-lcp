@@ -160,9 +160,9 @@ model User {
   lastLoginAt     DateTime?
   creePar         String?
   compte          Compte?
-  distributeur    Distributeur?
-  conseiller      Conseiller?
-  client          Client?
+  distributeurs   Distributeur[]
+  conseillers     Conseiller[]
+  clients         Client[]
   auditLogs       AuditLog[]
   notifications   Notification[]
   documents       Document[]
@@ -198,7 +198,7 @@ model Distributeur {
   siege                String?
   pays                 String           @default("CI")
   ville                String
-  userId               String           @unique
+  userId               String
   parentDistributeurId String?
   caution              Decimal?         @db.Decimal(15,2)
   createdAt            DateTime         @default(now())
@@ -220,7 +220,7 @@ model Conseiller {
   commune        String?
   codeStand      String?
   distributeurId String
-  userId         String         @unique
+  userId         String
   caution        Decimal?       @db.Decimal(15,2)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -238,7 +238,7 @@ model Client {
   ville        String
   commune      String
   conseillerId String
-  userId       String     @unique
+  userId       String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   user         User       @relation(fields:[userId],references:[id])
