@@ -249,6 +249,7 @@ model Client {
 model Carte {
   id             String      @id @default(cuid())
   reference      String      @unique
+  refCourt       String?     @unique
   montant        Decimal     @db.Decimal(10,2)
   qrCodeAuth     String      @db.Text
   qrCodeEpargne  String      @db.Text
@@ -260,12 +261,31 @@ model Carte {
   conseillerId   String?
   usedAt         DateTime?
   usedByCompteId String?
+  lotId          String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   distributeur   Distributeur? @relation(fields:[distributeurId],references:[id])
   conseiller     Conseiller?   @relation(fields:[conseillerId],references:[id])
   transaction    Transaction?
+  lot            LotCarte?     @relation(fields:[lotId],references:[id])
   @@map("cartes")
+}
+
+model LotCarte {
+  id              String   @id @default(cuid())
+  reference       String   @unique
+  montant         Decimal  @db.Decimal(10,2)
+  quantite        Int
+  statut          String   @default("ACTIF")   // ACTIF | GRILLE
+  distributeurId  String?
+  creePar         String?
+  grillePar       String?
+  grilleAt        DateTime?
+  motif           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  cartes          Carte[]
+  @@map("lots_cartes")
 }
 
 model Transaction {

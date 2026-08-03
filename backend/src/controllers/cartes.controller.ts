@@ -1,31 +1,95 @@
 // backend/src/controllers/cartes.controller.ts
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
-import { generateRef, generateCode4, hashCode, verifyHashedCode, verifyQrToken } from '../utils/crypto';
+import { generateRef, generateRefCourt, generateLotRef, generateCode4, hashCode, verifyHashedCode, verifyQrToken } from '../utils/crypto';
 import { generateQrAuth, generateQrEpargne } from '../utils/qrcode';
 
 import { notifier, emailTpl } from '../utils/notifications';
 import { enregistrerVersement } from '../services/epargne.service';
 
+// Référence courte unique (avec relance en cas de collision)
+async function genRefCourtUnique(): Promise<string> {
+  for (let i = 0; i < 5; i++) {
+    const c = generateRefCourt();
+    const exists = await prisma.carte.findUnique({ where: { refCourt: c } });
+    if (!exists) return c;
+  }
+  return `CSE-${Date.now().toString(36).toUpperCase()}`;
+}
+
 export async function emettreCartes(req: Request, res: Response) {
-  const { montant, quantite = 1, distributeurId } = req.body;
+  const { montant, quantite = 1, distributeurId, lot } = req.body;
   if (!montant || montant < 200) return res.status(400).json({ error: 'Montant minimum : 200 FCFA' });
   if (quantite < 1 || quantite > 500) return res.status(400).json({ error: 'Quantité entre 1 et 500' });
+
+  const lotReference = (lot && String(lot).trim()) || generateLotRef();
+  const existeLot = await prisma.lotCarte.findUnique({ where: { reference: lotReference } });
+  if (existeLot) return res.status(409).json({ error: `La référence de lot ${lotReference} existe déjà` });
+
+  const lotRecord = await prisma.lotCarte.create({
+    data: { reference: lotReference, montant, quantite, distributeurId: distributeurId || null, creePar: req.user!.userId },
+  });
+
   const cartes = [];
   for (let i = 0; i < quantite; i++) {
     const reference      = generateRef('CARTE');
+    const refCourt       = await genRefCourtUnique();
     const codeValidation = generateCode4();
     const codeHash       = hashCode(codeValidation);
     const carte = await prisma.carte.create({
-      data: { reference, montant, qrCodeAuth:'', qrCodeEpargne:'', codeValidation:codeHash, distributeurId: distributeurId || null }
+      data: { reference, refCourt, montant, qrCodeAuth:'', qrCodeEpargne:'', codeValidation:codeHash, distributeurId: distributeurId || null, lotId: lotRecord.id }
     });
     const { token: qrAuthToken, image: qrAuthImg }       = await generateQrAuth(carte.id, reference);
     const { token: qrEpargneToken, image: qrEpargneImg } = await generateQrEpargne(carte.id, montant, reference);
     await prisma.carte.update({ where:{ id:carte.id }, data:{ qrCodeAuth:qrAuthToken, qrCodeEpargne:qrEpargneToken } });
-    cartes.push({ id:carte.id, reference, montant, codeValidation, qrAuthImage:qrAuthImg, qrEpargneImage:qrEpargneImg });
+    cartes.push({ id:carte.id, reference, refCourt, montant, codeValidation, qrAuthImage:qrAuthImg, qrEpargneImage:qrEpargneImg });
   }
-  await prisma.auditLog.create({ data:{ action:'EMISSION_CARTES', entite:'Carte', entiteId:'batch', actorId:req.user!.userId, details:{ montant, quantite, distributeurId } } });
-  return res.status(201).json({ success:true, data:cartes });
+  await prisma.auditLog.create({ data:{ action:'EMISSION_CARTES', entite:'Carte', entiteId:lotRecord.id, actorId:req.user!.userId, details:{ lot:lotReference, montant, quantite, distributeurId } } });
+  return res.status(201).json({ success:true, data:cartes, lot:{ id:lotRecord.id, reference:lotReference, montant, quantite } });
+}
+
+// Liste des lots de cartes avec statistiques
+export async function listerLots(req: Request, res: Response) {
+  const page   = parseInt(req.query.page as string || '1');
+  const limit  = parseInt(req.query.limit as string || '20');
+  const [total, lots] = await Promise.all([
+    prisma.lotCarte.count(),
+    prisma.lotCarte.findMany({ skip:(page-1)*limit, take:limit, orderBy:{ createdAt:'desc' } }),
+  ]);
+  const stats = await prisma.carte.groupBy({
+    by: ['lotId', 'statut'],
+    where: { lotId: { in: lots.map(l => l.id) } },
+    _count: { _all: true },
+  });
+  const parLot: Record<string, Record<string, number>> = {};
+  for (const s of stats) {
+    if (!s.lotId) continue;
+    parLot[s.lotId] = parLot[s.lotId] || {};
+    parLot[s.lotId][s.statut] = s._count._all;
+  }
+  const data = lots.map(l => {
+    const st = parLot[l.id] || {};
+    return { ...l, montant: Number(l.montant), totalCartes: (st.DISPONIBLE||0)+(st.VENDUE||0)+(st.UTILISEE||0)+(st.ANNULEE||0)+(st.EN_COURS_ACTIVATION||0), disponibles: st.DISPONIBLE||0, utilisees: st.UTILISEE||0, annulees: st.ANNULEE||0 };
+  });
+  return res.json({ data, pagination:{ total, page, limit, pages:Math.ceil(total/limit) } });
+}
+
+// Griller un lot entier en cas de fraude (annule toutes les cartes non utilisées)
+export async function grillerLot(req: Request, res: Response) {
+  const { id } = req.params;
+  const motif = (req.body && req.body.motif) || null;
+  const lot = await prisma.lotCarte.findUnique({ where:{ id } });
+  if (!lot) return res.status(404).json({ error:'Lot introuvable' });
+  if (lot.statut === 'GRILLE') return res.status(409).json({ error:'Ce lot est déjà grillé' });
+
+  const [, maj] = await prisma.$transaction([
+    prisma.lotCarte.update({ where:{ id }, data:{ statut:'GRILLE', grillePar:req.user!.userId, grilleAt:new Date(), motif } }),
+    prisma.carte.updateMany({ where:{ lotId:id, statut:{ in:['DISPONIBLE','VENDUE','EN_COURS_ACTIVATION'] } }, data:{ statut:'ANNULEE', activationLock:false, activationLockAt:null } }),
+  ]);
+
+  const utilisees = await prisma.carte.count({ where:{ lotId:id, statut:'UTILISEE' } });
+  await prisma.auditLog.create({ data:{ action:'GRILLAGE_LOT', entite:'LotCarte', entiteId:id, actorId:req.user!.userId, details:{ lot:lot.reference, motif, annulees:maj.count, utilisees } } });
+  return res.json({ success:true, message:`Lot ${lot.reference} grillé : ${maj.count} carte(s) annulée(s)`, data:{ annulees:maj.count, utilisees } });
 }
 
 export async function verifierCarte(req: Request, res: Response) {
@@ -171,8 +235,10 @@ export async function listerCartes(req: Request, res: Response) {
   const page   = parseInt(req.query.page as string || '1');
   const limit  = parseInt(req.query.limit as string || '20');
   const statut = req.query.statut as string | undefined;
+  const lot    = req.query.lot as string | undefined;
   const where: any = {};
   if (statut) where.statut = statut;
+  if (lot)    where.lotId  = lot;
   if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
     const d = await prisma.distributeur.findFirst({ where:{ userId:req.user!.userId } });
     if (d) where.distributeurId = d.id;
@@ -182,7 +248,7 @@ export async function listerCartes(req: Request, res: Response) {
   }
   const [total, cartes] = await Promise.all([
     prisma.carte.count({ where }),
-    prisma.carte.findMany({ where, skip:(page-1)*limit, take:limit, orderBy:{ createdAt:'desc' }, select:{ id:true, reference:true, montant:true, statut:true, createdAt:true, usedAt:true } })
+    prisma.carte.findMany({ where, skip:(page-1)*limit, take:limit, orderBy:{ createdAt:'desc' }, select:{ id:true, reference:true, refCourt:true, montant:true, statut:true, createdAt:true, usedAt:true, lot:{ select:{ reference:true, statut:true } } } })
   ]);
   return res.json({ data:cartes, pagination:{ total, page, limit, pages:Math.ceil(total/limit) } });
 }

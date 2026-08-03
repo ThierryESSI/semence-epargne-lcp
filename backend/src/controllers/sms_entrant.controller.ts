@@ -56,7 +56,7 @@ function parserSMS(body: string): ParsedSMS | null {
 async function smsErreur(tel: string, msg: string, aide = true) {
   const texteAide = aide ? `
 Format: RECHARGE [N-COMPTE] [REF-CARTE] [CODE4]
-Ex: RECHARGE SE-A1B2 CSEM-8C0G 5781` : '';
+Ex: RECHARGE SE-A1B2 CSE-8C0G 5781` : '';
   await sendSms({ to: tel, message: `LCP SEMENCE: ${msg}${texteAide}` }).catch(() => {});
 }
 
@@ -106,12 +106,24 @@ async function traiterSmsRecharge(telExpéditeur: string, message: string) {
     return;
   }
 
+  // Recherche : référence complète OU ref courte (CSE-XXXXXXXX) OU partielle
   const carte = await prisma.carte.findFirst({
-    where: { OR: [{ reference: refCarte }, { reference: { contains: refCarte } }] }
+    where: {
+      OR: [
+        { reference: refCarte },
+        { refCourt: refCarte },
+        { refCourt: { contains: refCarte } },
+        { reference: { contains: refCarte } },
+      ]
+    }
   });
-  if (!carte) { await smsErreur(telExpéditeur, `Carte ${refCarte} introuvable. Verifiez la reference.`); return; }
+  if (!carte) { await smsErreur(telExpéditeur, `Carte ${refCarte} introuvable. Verifiez la reference (CSE-XXXXXXXX).`); return; }
   if (carte.statut === 'UTILISEE') { await smsErreur(telExpéditeur, `Carte ${refCarte} deja utilisee.`, false); return; }
   if (carte.statut === 'ANNULEE')  { await smsErreur(telExpéditeur, `Carte ${refCarte} annulee. Contactez LCP: 2735960599.`, false); return; }
+  if (carte.lotId) {
+    const lot = await prisma.lotCarte.findUnique({ where: { id: carte.lotId }, select: { statut: true } });
+    if (lot && lot.statut === 'GRILLE') { await smsErreur(telExpéditeur, `Carte ${refCarte} rattachee a un lot grille pour fraude. Contactez LCP: 2735960599.`, false); return; }
+  }
 
   if (code.length !== 4 || !/^\d{4}$/.test(code)) {
     await smsErreur(telExpéditeur, 'Code invalide. Le code fait 4 chiffres numeriques.'); return;

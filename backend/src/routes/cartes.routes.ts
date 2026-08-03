@@ -8,7 +8,7 @@
 // backend/src/routes/cartes.routes.ts
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
-import { emettreCartes, listerCartes, verifierCarte, activerCarte, attribuerCarte } from '../controllers/cartes.controller';
+import { emettreCartes, listerCartes, listerLots, grillerLot, verifierCarte, activerCarte, attribuerCarte } from '../controllers/cartes.controller';
 
 const router = Router();
 router.use(authenticate);
@@ -18,6 +18,10 @@ router.post('/emettre',   authorize('MASTER'), emettreCartes);
 
 // Liste des cartes (avec filtre statut) — utilisée par l'onglet Émission
 router.get('/emettre', listerCartes);
+
+// Lots de cartes : liste + grillage (fraude)
+router.get('/lots',          authorize('MASTER', 'SUPER_ADMIN'), listerLots);
+router.post('/lots/:id/griller', authorize('MASTER', 'SUPER_ADMIN'), grillerLot);
 
 // Vérification authenticité (accessible à tous les rôles authentifiés)
 router.post('/verifier',  verifierCarte);

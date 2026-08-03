@@ -72,6 +72,23 @@ export function generateRef(prefix: string): string {
   return `${prefix}-${ts}${rand}`;
 }
 
+// Référence courte imprimée sur la carte (utilisée pour la recharge SMS)
+// Format : CSE-XXXXXXXX (8 caractères alphanumériques)
+export function generateRefCourt(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans O/0/I/1
+  let out = '';
+  for (let i = 0; i < 8; i++) out += alphabet[crypto.randomInt(alphabet.length)];
+  return `CSE-${out}`;
+}
+
+// Référence d'un lot de cartes : LOT-XXXXXX
+export function generateLotRef(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < 6; i++) out += alphabet[crypto.randomInt(alphabet.length)];
+  return `LOT-${out}`;
+}
+
 export function generateCodeActeur(prefix: string, seq: number): string {
   return `${prefix}-${seq.toString().padStart(6, '0')}`;
 }
