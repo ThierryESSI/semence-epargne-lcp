@@ -49,15 +49,6 @@ export async function ouvrirCompte(req: Request, res: Response) {
         return res.status(400).json({ error:'Numéro WhatsApp invalide. Même format CI requis.' });
     }
 
-    if (telephone) {
-      const ex = await prisma.user.findUnique({ where:{ telephone } });
-      if (ex) return res.status(409).json({ error:`Le téléphone ${telephone} est déjà utilisé` });
-    }
-    if (email) {
-      const ex = await prisma.user.findUnique({ where:{ email } });
-      if (ex) return res.status(409).json({ error:`L'email ${email} est déjà utilisé` });
-    }
-
     let conseillerId = conseillerIdBody;
     if (!conseillerId && req.user!.role === 'CONSEILLER') {
       const c = await prisma.conseiller.findFirst({ where:{ userId:req.user!.userId } });
@@ -70,12 +61,48 @@ export async function ouvrirCompte(req: Request, res: Response) {
     if (!conseillerId)
       return res.status(400).json({ error:'Aucun conseiller disponible. Créez d\'abord un conseiller.' });
 
+    // ── Réutilisation d'un compte existant (1 personne = 1 compte) ──
+    const existingUser = await prisma.user.findUnique({ where:{ telephone } });
+    const userParEmail = !existingUser && email ? await prisma.user.findUnique({ where:{ email } }) : null;
+    const user         = existingUser || userParEmail;
+
+    if (user) {
+      const dejaClient = await prisma.client.findFirst({ where:{ userId:user.id } });
+      if (dejaClient)
+        return res.status(409).json({ error:`${user.prenom || ''} ${user.nom} est déjà client (${dejaClient.code})` });
+
+      const hasCompte = await prisma.compte.findFirst({ where:{ userId:user.id } });
+      let numeroCompte = hasCompte?.numeroCompte;
+      let rib          = hasCompte?.rib;
+      if (!hasCompte) {
+        numeroCompte = `SE-${user.id.slice(-8).toUpperCase()}`;
+        rib          = generateRIB(user.id);
+        await prisma.compte.create({ data:{ numeroCompte, rib, type:typeCompte as any, statut:'ACTIF', userId:user.id } });
+      }
+
+      const codeClient = generateCodeActeur('CLI', await prisma.client.count() + 1);
+      const villeFinal = ville || departement || region;
+      await prisma.client.create({ data:{ code:codeClient, region, ville:villeFinal, commune, conseillerId, userId:user.id } });
+
+      if (whatsapp)
+        await prisma.user.update({ where:{ id:user.id }, data:{ whatsapp, notifWhatsapp: notifWhatsapp && !!whatsapp } });
+
+      await prisma.auditLog.create({ data:{ action:'OUVERTURE_COMPTE', entite:'User', entiteId:user.id, actorId:req.user!.userId, details:{ codeClient, numeroCompte, rib, telephone, compteReutilise:true } } });
+
+      return res.status(201).json({
+        success: true,
+        message: 'Client ajouté au compte existant.',
+        data:    { userId:user.id, codeClient, numeroCompte, rib, telephone, whatsapp: whatsapp || user.whatsapp || null, compteReutilise:true }
+      });
+    }
+
+    // ── Nouveau compte ──────────────────────────────────────────────
     const emailFinal     = email || `${telephone.replace(/\D/g,'')}@semence-noemail.ci`;
     const tempPassword   = `LCP${Math.floor(1000 + Math.random() * 9000)}`;
     const passwordHash   = await bcrypt.hash(tempPassword, 12);
     const countClients   = await prisma.client.count();
 
-    const user = await prisma.user.create({
+    const newUser = await prisma.user.create({
       data: {
         email:         emailFinal,
         telephone,
@@ -91,19 +118,19 @@ export async function ouvrirCompte(req: Request, res: Response) {
     });
 
     const codeClient   = generateCodeActeur('CLI', countClients + 1);
-    const numeroCompte = `SE-${user.id.slice(-8).toUpperCase()}`;
-    const rib          = generateRIB(user.id);
+    const numeroCompte = `SE-${newUser.id.slice(-8).toUpperCase()}`;
+    const rib          = generateRIB(newUser.id);
     const villeFinal   = ville || departement || region;
 
-    await prisma.client.create({ data:{ code:codeClient, region, ville:villeFinal, commune, conseillerId, userId:user.id } });
-    await prisma.compte.create({ data:{ numeroCompte, rib, type:typeCompte as any, statut:'ACTIF', userId:user.id } });
-    await prisma.auditLog.create({ data:{ action:'OUVERTURE_COMPTE', entite:'User', entiteId:user.id, actorId:req.user!.userId, details:{ codeClient, numeroCompte, rib, telephone } } });
+    await prisma.client.create({ data:{ code:codeClient, region, ville:villeFinal, commune, conseillerId, userId:newUser.id } });
+    await prisma.compte.create({ data:{ numeroCompte, rib, type:typeCompte as any, statut:'ACTIF', userId:newUser.id } });
+    await prisma.auditLog.create({ data:{ action:'OUVERTURE_COMPTE', entite:'User', entiteId:newUser.id, actorId:req.user!.userId, details:{ codeClient, numeroCompte, rib, telephone } } });
 
     // Notification multi-canal à l'inscription
     const appUrl  = process.env.FRONTEND_URL || 'https://app.semenceep.ci';
     const tplEmail = emailTpl.compteOuvert(`${prenom} ${nom}`, numeroCompte, rib, telephone, tempPassword);
     await notifier({
-      userId:        user.id,
+      userId:        newUser.id,
       telephone,
       whatsapp:      whatsapp || null,
       email:         email || null,
@@ -117,7 +144,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
     return res.status(201).json({
       success: true,
       message: 'Compte créé avec succès.',
-      data:    { userId:user.id, codeClient, numeroCompte, rib, telephone, whatsapp:whatsapp||null, tempPassword }
+      data:    { userId:newUser.id, codeClient, numeroCompte, rib, telephone, whatsapp:whatsapp||null, tempPassword }
     });
   } catch (err: any) {
     if (err.code === 'P2002') { const field = err.meta?.target?.[0]||'champ'; return res.status(409).json({ error:`Ce ${field} est déjà utilisé` }); }
