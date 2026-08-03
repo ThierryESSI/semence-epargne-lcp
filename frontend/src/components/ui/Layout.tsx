@@ -14,6 +14,9 @@ const NAV_ADMIN = [
   { to:'/admin/cartes',         label:'Cartes Semence',    icon:'▣' },
   { to:'/admin/transactions',   label:'Transactions',      icon:'⇄' },
   { to:'/admin/epargne-plans',  label:'Plans Epargne',     icon:'◈' },
+  { to:'/admin/chat',           label:'Messagerie',        icon:'◎' },
+  { to:'/admin/ia',             label:'Analyse IA',        icon:'◆' },
+  { to:'/admin/galerie',        label:'Galerie photos',    icon:'▢' },
   { to:'/admin/recharges-sms',  label:'Recharges SMS',     icon:'◎' },
   { to:'/admin/admins',         label:'Gestion Admins',    icon:'◉' },
   { to:'/admin/rapports',       label:'Rapports',          icon:'▦' },
@@ -26,6 +29,7 @@ const NAV_CLIENT = [
   { to:'/client/virement',      label:'Virement',          icon:'⇄' },
   { to:'/client/activer-carte', label:'Activer une carte', icon:'▣' },
   { to:'/client/transactions',  label:'Historique',        icon:'▦' },
+  { to:'/client/chat',          label:'Messagerie',        icon:'◎' },
 ];
 
 export default function Layout() {

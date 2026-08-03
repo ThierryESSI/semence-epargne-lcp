@@ -9,8 +9,8 @@ import authRoutes         from './routes/auth.routes';
 import comptesRoutes      from './routes/comptes.routes';
 import cartesRoutes       from './routes/cartes.routes';
 import transactionsRoutes from './routes/transactions.routes';
-import conseillersRoutes  from './routes/conseillers.routes';
 import distributeursRoutes from './routes/distributeurs.routes';
+import conseillersRoutes  from './routes/conseillers.routes';
 import clientsRoutes      from './routes/clients.routes';
 import adminRoutes        from './routes/admin.routes';
 import syncRoutes         from './routes/sync.routes';
@@ -21,11 +21,13 @@ import superAdminRoutes   from './routes/super_admin.routes';
 import documentsRoutes    from './routes/documents.routes';
 import rapportRoutes      from './routes/rapport.routes';
 import siteConfigRoutes   from './routes/site_config.routes';
+import galerieRoutes      from './routes/galerie.routes';
+import iaRapportsRoutes   from './routes/ia_rapports.routes';
+import chatRoutes         from './routes/chat.routes';
 import { errorHandler }   from './middleware/error.middleware';
 import { initSiteConfig } from './controllers/site_config.controller';
 
 const app = express();
-app.set('trust proxy', 1); // Derrière le reverse proxy Railway/Vercel
 
 // ── Sécurité ────────────────────────────────────────────────────────
 app.use(helmet({
@@ -42,31 +44,13 @@ app.use(express.json({ limit:'10mb' }));
 app.use(express.urlencoded({ extended:true, limit:'10mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// ── Health check (déclaré AVANT les routes pour rester public) ────
-app.get('/api/health', (_, res) => res.json({
-  status:  'OK',
-  service: 'Semence Epargne API',
-  version: '1.0.0',
-  domain:  'semenceep.ci',
-}));
-
-// ── Diagnostic temporaire SMS (à retirer après validation) ────────
-app.get('/api/debug/sms-config', (_, res) => {
-  res.json({
-    smsKeyConfigured: Boolean(process.env.SMS_SPKEY),
-    smsKeyPrefix:     (process.env.SMS_SPKEY || '').slice(0, 4) + '…' + (process.env.SMS_SPKEY || '').slice(-4),
-    smsApiUrl:        process.env.SMS_API_URL || '(défaut: https://www.specialsms.net/mysmsplus/envoyersms.php)',
-    nodeEnv:          process.env.NODE_ENV || 'non défini',
-  });
-});
-
 // ── Routes ────────────────────────────────────────────────────────
 app.use('/api/auth',          authRoutes);
 app.use('/api/comptes',       comptesRoutes);
 app.use('/api/cartes',        cartesRoutes);
 app.use('/api/transactions',  transactionsRoutes);
-app.use('/api/conseillers',   conseillersRoutes);
 app.use('/api/distributeurs', distributeursRoutes);
+app.use('/api/conseillers',   conseillersRoutes);
 app.use('/api/clients',       clientsRoutes);
 app.use('/api/admin',         adminRoutes);
 app.use('/api',               syncRoutes);
@@ -77,6 +61,17 @@ app.use('/api/super-admin',   superAdminRoutes);
 app.use('/api/documents',     documentsRoutes);
 app.use('/api/rapports',      rapportRoutes);
 app.use('/api/site-config',   siteConfigRoutes);
+app.use('/api/galerie',       galerieRoutes);
+app.use('/api/ia',            iaRapportsRoutes);
+app.use('/api/chat',          chatRoutes);
+
+// ── Health check ──────────────────────────────────────────────────
+app.get('/api/health', (_, res) => res.json({
+  status:  'OK',
+  service: 'Semence Epargne API',
+  version: '1.0.0',
+  domain:  'semenceep.ci',
+}));
 
 app.use('*', (_, res) => res.status(404).json({ error: 'Route introuvable' }));
 app.use(errorHandler);

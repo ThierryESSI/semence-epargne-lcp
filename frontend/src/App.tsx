@@ -25,6 +25,10 @@ const EpargnePage = lazy(() => import('./pages/client/EpargnePage'));
 const VirementPage = lazy(() => import('./pages/client/VirementPage'));
 const ActivationCartePage = lazy(() => import('./pages/client/ActivationCartePage'));
 const OfflinePage = lazy(() => import('./pages/OfflinePage'));
+const IArapports = lazy(() => import('./pages/admin/IArapports'));
+const Chat       = lazy(() => import('./pages/admin/Chat'));
+const Galerie    = lazy(() => import('./pages/admin/Galerie'));
+const ClientChat = lazy(() => import('./pages/client/ClientChat'));
 
 const ROLE_HOME: Record<string,string> = {
   SUPER_ADMIN:'/admin', MASTER:'/admin',
@@ -46,6 +50,7 @@ function Protected({ children, roles }: { children: React.ReactNode; roles?: str
 }
 
 const ADMIN = ['SUPER_ADMIN','MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER'];
+const IA_ACCES = ['SUPER_ADMIN','MASTER','DISTRIBUTEUR_INTERNE'];
 
 export default function App() {
   return (
@@ -68,6 +73,9 @@ export default function App() {
           <Route path="epargne-plans" element={<EpargnePlans />} />
           <Route path="rapports"      element={<AdminRapports />} />
           <Route path="parametres"    element={<AdminParametres />} />
+          <Route path="ia"            element={<Protected roles={IA_ACCES}><IArapports /></Protected>} />
+          <Route path="chat"          element={<Chat />} />
+          <Route path="galerie"       element={<Protected roles={['SUPER_ADMIN','MASTER']}><Galerie /></Protected>} />
           <Route path="admins"        element={<Protected roles={['SUPER_ADMIN','MASTER']}><GestionAdmins /></Protected>} />
           <Route path="offline"       element={<OfflinePage />} />
         </Route>
@@ -80,6 +88,7 @@ export default function App() {
           <Route path="activer-carte"   element={<ActivationCartePage />} />
           <Route path="transactions"    element={<ClientTransactions />} />
           <Route path="rapports"        element={<ClientRapports />} />
+          <Route path="chat"            element={<ClientChat />} />
           <Route path="offline"         element={<OfflinePage />} />
         </Route>
 

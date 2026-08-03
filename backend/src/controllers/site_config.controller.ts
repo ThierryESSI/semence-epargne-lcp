@@ -24,6 +24,8 @@ const CONFIGS_DEFAUT = [
   { cle:'NOTIF_WHATSAPP_ACTIVE', valeur:'true',                  type:'BOOLEAN', label:'Notifications WhatsApp actives' },
   { cle:'NOTIF_EMAIL_ACTIVE',    valeur:'true',                  type:'BOOLEAN', label:'Notifications Email actives' },
   { cle:'MAINTENANCE_MODE',      valeur:'false',                 type:'BOOLEAN', label:'Mode maintenance' },
+  { cle:'NUMERO_SMS_LCP',   valeur:'',      type:'TEXT',    label:'Numero SMS zone rurale (ex: 0712345678)' },
+  { cle:'GALERIE_ACTIVE',   valeur:'false', type:'BOOLEAN', label:'Activer la galerie sur le site' },
 ];
 
 // Initialiser les configs par défaut (à appeler au démarrage)

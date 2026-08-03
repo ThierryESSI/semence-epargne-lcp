@@ -166,6 +166,8 @@ model User {
   auditLogs       AuditLog[]
   notifications   Notification[]
   documents       Document[]
+  chatEnvoyes     ChatMessage[] @relation("ChatExpedites")
+  chatRecus       ChatMessage[] @relation("ChatClient")
   @@map("users")
 }
 
@@ -433,4 +435,17 @@ model RapportPDF {
   createdAt   DateTime @default(now())
   @@unique([periode, type])
   @@map("rapports_pdf")
+}
+
+// ─── Messagerie interne clients ↔ conseillers/administrateurs ────────
+model ChatMessage {
+  id           String   @id @default(cuid())
+  clientId     String
+  expediteurId String
+  contenu      String   @db.Text
+  lu           Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  expediteur   User     @relation("ChatExpedites", fields:[expediteurId], references:[id])
+  client       User     @relation("ChatClient", fields:[clientId], references:[id])
+  @@map("chat_messages")
 }

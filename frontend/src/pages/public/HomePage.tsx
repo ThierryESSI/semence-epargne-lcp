@@ -181,11 +181,15 @@ export default function HomePage() {
   const [cms, setCms] = useState(DEFAULT_CMS);
   const [form, setForm] = useState({ nom:'', email:'', telephone:'', montant:'' });
   const [sent, setSent] = useState(false);
+  const [galeriePhotos, setGaleriePhotos] = useState<any[]>([]);
   const formRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.get('/site-config/public')
       .then(r => setCms({ ...DEFAULT_CMS, ...r.data.data }))
+      .catch(() => {});
+    api.get('/galerie')
+      .then(r => setGaleriePhotos(r.data.data || []))
       .catch(() => {});
   }, []);
 
@@ -390,6 +394,36 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* ── GALERIE ───────────────────────────────────────── */}
+      {cms.GALERIE_ACTIVE === 'true' && galeriePhotos.length > 0 && (
+        <section style={{ padding:'72px 6%', background:BG }}>
+          <div style={{ textAlign:'center', marginBottom:48 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:PRI, letterSpacing:'.1em',
+              textTransform:'uppercase', marginBottom:10 }}>Notre galerie</div>
+            <h2 style={{ fontSize:32, fontWeight:900, margin:'0 0 12px' }}>Nos moments forts</h2>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:20 }}>
+            {galeriePhotos.map((photo:any) => (
+              <div key={photo.cle} style={{ borderRadius:16, overflow:'hidden',
+                boxShadow:'0 4px 20px rgba(15,46,82,0.1)', border:`1px solid ${BORDER}` }}>
+                <img src={photo.url} alt={photo.titre}
+                  style={{ width:'100%', height:220, objectFit:'cover' }}/>
+                {(photo.titre || photo.descriptif) && (
+                  <div style={{ padding:'14px 16px', background:WHITE }}>
+                    {photo.titre && (
+                      <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{photo.titre}</div>
+                    )}
+                    {photo.descriptif && (
+                      <div style={{ fontSize:12, color:MUTED }}>{photo.descriptif}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── FORMULAIRE ────────────────────────────────────── */}
       <section id="formulaire" ref={formRef} style={{ padding: '72px 6%', background: `linear-gradient(135deg, ${DARK}, ${SEC})` }}>

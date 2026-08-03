@@ -1,0 +1,76 @@
+// backend/src/controllers/galerie.controller.ts
+// © 2024-2026 MaGestion Facile — M. Thierry ESSI
+import { Request, Response } from 'express';
+import prisma from '../utils/prisma';
+import { uploadToCloudinary, deleteFromCloudinary } from '../utils/upload';
+
+export async function listerPhotos(_req: Request, res: Response) {
+  try {
+    const configs = await prisma.siteConfig.findMany({
+      where: { cle: { startsWith: 'GALERIE_PHOTO_' } },
+      orderBy: { cle: 'asc' }
+    });
+    const photos = configs.map(c => {
+      try { return { ...JSON.parse(c.valeur), cle: c.cle }; }
+      catch { return null; }
+    }).filter(Boolean);
+    return res.json({ data: photos });
+  } catch(err: any) { return res.status(500).json({ error: err.message }); }
+}
+
+export async function ajouterPhoto(req: Request, res: Response) {
+  try {
+    const { titre, descriptif } = req.body;
+    if (!req.file) return res.status(400).json({ error: 'Image requise' });
+    const { url, publicId } = await uploadToCloudinary(req.file.buffer, {
+      folder: 'galerie', resourceType: 'image'
+    });
+    const existing = await prisma.siteConfig.count({
+      where: { cle: { startsWith: 'GALERIE_PHOTO_' } }
+    });
+    const cle = `GALERIE_PHOTO_${String(existing + 1).padStart(3, '0')}`;
+    await prisma.siteConfig.create({
+      data: {
+        cle,
+        valeur: JSON.stringify({ url, publicId, titre: titre || '', descriptif: descriptif || '', ordre: existing + 1 }),
+        type: 'IMAGE',
+        label: `Photo galerie ${existing + 1}`,
+        updatedBy: req.user!.userId
+      }
+    });
+    await prisma.auditLog.create({
+      data: { action: 'GALERIE_AJOUT_PHOTO', entite: 'SiteConfig', entiteId: cle, actorId: req.user!.userId }
+    });
+    return res.status(201).json({ success: true, data: { cle, url, titre, descriptif } });
+  } catch(err: any) { return res.status(500).json({ error: err.message }); }
+}
+
+export async function modifierPhoto(req: Request, res: Response) {
+  try {
+    const { cle } = req.params;
+    const { titre, descriptif } = req.body;
+    const existing = await prisma.siteConfig.findUnique({ where: { cle } });
+    if (!existing) return res.status(404).json({ error: 'Photo introuvable' });
+    const data = JSON.parse(existing.valeur);
+    const updated = { ...data, titre: titre ?? data.titre, descriptif: descriptif ?? data.descriptif };
+    await prisma.siteConfig.update({
+      where: { cle }, data: { valeur: JSON.stringify(updated), updatedBy: req.user!.userId }
+    });
+    return res.json({ success: true, data: updated });
+  } catch(err: any) { return res.status(500).json({ error: err.message }); }
+}
+
+export async function supprimerPhoto(req: Request, res: Response) {
+  try {
+    const { cle } = req.params;
+    const existing = await prisma.siteConfig.findUnique({ where: { cle } });
+    if (!existing) return res.status(404).json({ error: 'Photo introuvable' });
+    const data = JSON.parse(existing.valeur);
+    if (data.publicId) await deleteFromCloudinary(data.publicId);
+    await prisma.siteConfig.delete({ where: { cle } });
+    await prisma.auditLog.create({
+      data: { action: 'GALERIE_SUPPRESSION_PHOTO', entite: 'SiteConfig', entiteId: cle, actorId: req.user!.userId }
+    });
+    return res.json({ success: true, message: 'Photo supprimee' });
+  } catch(err: any) { return res.status(500).json({ error: err.message }); }
+}

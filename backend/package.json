@@ -14,6 +14,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.3",
     "@prisma/client": "^5.10.0",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.2.0",
@@ -29,12 +30,12 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.9",
     "pdfkit": "^0.15.0",
-    "qrcode": "^1.5.3",
-    "uuid": "^9.0.0",
-    "zod": "^3.22.4",
     "prisma": "^5.10.0",
+    "qrcode": "^1.5.3",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "uuid": "^9.0.0",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -43,11 +44,11 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/morgan": "^1.9.9",
     "@types/multer": "^1.4.11",
+    "@types/node": "^20.11.17",
     "@types/nodemailer": "^6.4.14",
     "@types/pdfkit": "^0.13.4",
     "@types/qrcode": "^1.5.5",
     "@types/uuid": "^9.0.7",
-    "@types/node": "^20.11.17",
     "ts-node-dev": "^2.0.0"
   },
   "engines": {
