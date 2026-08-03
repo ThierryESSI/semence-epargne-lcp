@@ -89,6 +89,16 @@ export async function ouvrirCompte(req: Request, res: Response) {
 
       await prisma.auditLog.create({ data:{ action:'OUVERTURE_COMPTE', entite:'User', entiteId:user.id, actorId:req.user!.userId, details:{ codeClient, numeroCompte, rib, telephone, compteReutilise:true } } });
 
+      notifier({
+        userId:         user.id,
+        telephone:      user.telephone,
+        whatsapp:       user.whatsapp,
+        email:          user.email,
+        notifWhatsapp:  user.notifWhatsapp,
+        notifEmail:     user.notifEmail,
+        messageSms:     tpl.compteClientAjoute(`${user.prenom} ${user.nom}`, codeClient, numeroCompte!),
+      }).catch(() => {});
+
       return res.status(201).json({
         success: true,
         message: 'Client ajouté au compte existant.',

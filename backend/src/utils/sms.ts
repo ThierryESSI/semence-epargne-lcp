@@ -31,11 +31,11 @@ export async function sendSms(
 
   const numero = normaliserNumero(payload.to);
 
-  // SpecialSMS attend un POST avec Spkey, Sptel, Spmsg
+  // SpecialSMS attend un POST avec spkey, sptel, spmsg (minuscules — PHP $_POST est sensible à la casse)
   const body = new URLSearchParams({
-    Spkey: SMS_SPKEY,
-    Sptel: numero,
-    Spmsg: payload.message,
+    spkey: SMS_SPKEY,
+    sptel: numero,
+    spmsg: payload.message,
   });
 
   try {
@@ -77,6 +77,9 @@ export const tpl = {
 
   compteActive: (nom: string) =>
     `SEMENCE EPARGNE: Bonjour ${nom}, votre compte est actif. Bonne epargne!`,
+
+  compteClientAjoute: (nom: string, codeClient: string, numeroCompte: string) =>
+    `SEMENCE EPARGNE LCP\nBonjour ${nom}!\nVotre compte ${numeroCompte} est desormais actif en tant que CLIENT (${codeClient}).\nConnectez-vous avec votre numero habituel.`,
 
   depotSucces: (montant: number, frais: number, solde: number) =>
     `SEMENCE EPARGNE: Depot ${fCFA(montant)}. Frais: ${fCFA(frais)}. Solde: ${fCFA(solde)}.`,
