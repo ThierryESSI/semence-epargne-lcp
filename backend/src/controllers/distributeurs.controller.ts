@@ -100,7 +100,7 @@ export async function listerDistributeurs(req: Request, res: Response) {
   const search = (req.query.search as string || '').trim();
 
   const where: any = {};
-  if (req.user!.role !== 'MASTER') {
+  if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
     const d = await prisma.distributeur.findUnique({ where: { userId: req.user!.userId } });
     where.parentDistributeurId = d?.id || '__AUCUN__';
   }
