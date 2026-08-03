@@ -54,7 +54,9 @@ function parserSMS(body: string): ParsedSMS | null {
 }
 
 async function smsErreur(tel: string, msg: string, aide = true) {
-  const texteAide = aide ? '\nFormat: RECHARGE [N-COMPTE] [REF-CARTE] [CODE4]\nEx: RECHARGE SE-A1B2 CSEM-8C0G 5781' : '';
+  const texteAide = aide ? '
+Format: RECHARGE [N-COMPTE] [REF-CARTE] [CODE4]
+Ex: RECHARGE SE-A1B2 CSEM-8C0G 5781' : '';
   await sendSms({ to: tel, message: `LCP SEMENCE: ${msg}${texteAide}` }).catch(() => {});
 }
 
@@ -171,4 +173,58 @@ export async function historiqueRechargesSMS(req: Request, res: Response) {
     ]);
     return res.json({ data:logs, pagination:{ total, page, limit, pages:Math.ceil(total/limit) } });
   } catch (err:any) { return res.status(500).json({ error:err.message }); }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// OPTION C — WhatsApp Business API entrant
+// Webhook reçu de Meta WhatsApp Business API
+// URL à configurer dans Meta : https://api.semenceep.ci/api/sms/whatsapp
+// ═══════════════════════════════════════════════════════════════════
+
+// Vérification token Meta (obligatoire pour valider le webhook)
+export async function whatsappVerify(req: Request, res: Response) {
+  const mode      = req.query['hub.mode'];
+  const token     = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  const expected  = process.env.WHATSAPP_VERIFY_TOKEN || 'SemenceEpWhatsApp2026';
+
+  if (mode === 'subscribe' && token === expected) {
+    console.log('[WhatsApp] Webhook verifie avec succes');
+    return res.status(200).send(challenge);
+  }
+  return res.status(403).json({ error: 'Token invalide' });
+}
+
+// Réception d'un message WhatsApp entrant
+export async function whatsappEntrant(req: Request, res: Response) {
+  // Repondre immediatement a Meta (eviter timeout 20s)
+  res.status(200).json({ status: 'ok' });
+
+  try {
+    const body = req.body;
+
+    // Extraire le message et l'expediteur depuis le format Meta
+    const entry    = body?.entry?.[0];
+    const changes  = entry?.changes?.[0];
+    const value    = changes?.value;
+    const messages = value?.messages;
+
+    if (!messages || messages.length === 0) return;
+
+    const msg      = messages[0];
+    const expediteur = msg.from;           // Format: 2250712345678
+    const texte    = msg.text?.body || '';
+
+    if (!expediteur || !texte) return;
+
+    console.log(`[WhatsApp Entrant] De: +${expediteur} → "${texte}"`);
+
+    // Meme logique de traitement que le SMS GSM
+    const telFormat = '+' + expediteur;
+    await traiterSmsRecharge(telFormat, texte);
+
+  } catch (err: any) {
+    console.error('[WhatsApp Entrant] Erreur:', err?.message);
+  }
 }
