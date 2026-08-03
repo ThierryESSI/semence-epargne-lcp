@@ -16,6 +16,9 @@ router.use(authenticate);
 // Master : émettre un lot de cartes
 router.post('/emettre',   authorize('MASTER'), emettreCartes);
 
+// Liste des cartes (avec filtre statut) — utilisée par l'onglet Émission
+router.get('/emettre', listerCartes);
+
 // Vérification authenticité (accessible à tous les rôles authentifiés)
 router.post('/verifier',  verifierCarte);
 
