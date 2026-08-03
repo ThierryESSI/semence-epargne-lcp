@@ -25,9 +25,16 @@ export async function creerPlanEpargne(compteId: string, palier: PalierBonus) {
   const dateDebut = new Date();
   const dateEcheance = new Date();
   dateEcheance.setDate(dateEcheance.getDate() + config.dureeJours);
+
+  // [ALIGNEMENT] Le taux est piloté par l'admin (Paramètres → Taux bonus) via SiteConfig,
+  // avec repli sur les valeurs par défaut si non configuré.
+  const cleTaux = { TROIS_MOIS: 'BONUS_3M_TAUX', SIX_MOIS: 'BONUS_6M_TAUX', DOUZE_MOIS: 'BONUS_12M_TAUX' }[palier];
+  const cfgTaux = cleTaux ? await prisma.siteConfig.findUnique({ where: { cle: cleTaux } }) : null;
+  const taux = cfgTaux && parseFloat(cfgTaux.valeur) > 0 ? parseFloat(cfgTaux.valeur) : config.taux;
+
   return prisma.planEpargne.create({
     data: { compteId, palier, statut: 'EN_COURS', dateDebut, dateEcheance,
-      soldeDepart: compte.solde, soldeActuel: compte.solde, bonusTaux: config.taux,
+      soldeDepart: compte.solde, soldeActuel: compte.solde, bonusTaux: taux,
       nbVersementsRequis: config.versementsMin, nbVersementsEffectues: 0, montantTotalVerse: 0 }
   });
 }

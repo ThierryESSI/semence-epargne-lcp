@@ -12,9 +12,14 @@ function fmt(n: number) {
 
 async function collecterDonnees(periode?: string) {
   const now   = new Date();
+  // [SÉCURITÉ] Valider le format YYYY-MM pour éviter toute injection de date invalide
+  if (periode && !/^\d{4}-\d{2}$/.test(periode)) {
+    throw new Error('Période invalide. Format attendu : YYYY-MM');
+  }
   const debut = periode
     ? new Date(periode + '-01')
     : new Date(now.getFullYear(), now.getMonth(), 1);
+  if (isNaN(debut.getTime())) throw new Error('Période invalide. Format attendu : YYYY-MM');
   const fin = new Date(debut.getFullYear(), debut.getMonth() + 1, 1);
 
   const [
@@ -129,6 +134,9 @@ export async function questionIA(req: Request, res: Response) {
   try {
     const { question, periode } = req.body;
     if (!question) return res.status(400).json({ error: 'Question requise' });
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'Cle API Anthropic non configuree (ANTHROPIC_API_KEY)' });
+    }
     const donnees = await collecterDonnees(periode);
     const message = await client.messages.create({
       model: 'claude-haiku-4-5', max_tokens: 800,

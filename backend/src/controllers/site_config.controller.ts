@@ -18,6 +18,7 @@ const CONFIGS_DEFAUT = [
   { cle:'SITE_COULEUR_PRIMAIRE',  valeur:'#F65A04',             type:'TEXT',    label:'Couleur orange (logo)' },
   { cle:'SITE_COULEUR_SECONDAIRE',valeur:'#1C5B9B',             type:'TEXT',    label:'Couleur bleue (logo)' },
   { cle:'FRAIS_TAUX',        valeur:'0.01',                      type:'TEXT',    label:'Taux de frais (1%)' },
+  { cle:'PART_LCP',          valeur:'0.006',                     type:'TEXT',    label:'Part LCP (0.6%)' },
   { cle:'BONUS_3M_TAUX',     valeur:'0.035',                     type:'TEXT',    label:'Taux bonus 3 mois' },
   { cle:'BONUS_6M_TAUX',     valeur:'0.08',                      type:'TEXT',    label:'Taux bonus 6 mois' },
   { cle:'BONUS_12M_TAUX',    valeur:'0.17',                      type:'TEXT',    label:'Taux bonus 12 mois' },

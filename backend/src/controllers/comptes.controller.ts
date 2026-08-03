@@ -165,6 +165,15 @@ export async function ouvrirCompte(req: Request, res: Response) {
 export async function activerCompte(req: Request, res: Response) {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ error:'userId requis' });
+
+  // [SÉCURITÉ] Un client ne peut activer que SON compte ; les rôles staff activent qui ils veulent
+  const role = req.user!.role;
+  if (role === 'CLIENT') {
+    if (userId !== req.user!.userId) return res.status(403).json({ error:'Accès refusé' });
+  } else if (!['MASTER','SUPER_ADMIN','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER'].includes(role)) {
+    return res.status(403).json({ error:'Accès refusé' });
+  }
+
   const user = await prisma.user.findUnique({ where:{ id:userId } });
   if (!user) return res.status(404).json({ error:'Utilisateur introuvable' });
   if (user.actif) return res.json({ message:'Compte déjà actif' });

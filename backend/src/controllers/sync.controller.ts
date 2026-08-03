@@ -139,8 +139,8 @@ async function syncDepotCarte(op: OfflineOp, actorId: string): Promise<SyncResul
   }
 
   const [cfgFrais, cfgLcp] = await Promise.all([
-    prisma.config.findUnique({ where: { cle: 'FRAIS_TAUX' } }),
-    prisma.config.findUnique({ where: { cle: 'PART_LCP' } }),
+    prisma.siteConfig.findUnique({ where: { cle: 'FRAIS_TAUX' } }),
+    prisma.siteConfig.findUnique({ where: { cle: 'PART_LCP' } }),
   ]);
   const taux    = parseFloat(cfgFrais?.valeur || '0.01');
   const tauxLcp = parseFloat(cfgLcp?.valeur   || '0.006');

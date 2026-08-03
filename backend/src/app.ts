@@ -40,7 +40,7 @@ app.use(cors({
   methods:     ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
 }));
 app.use(rateLimit({ windowMs:15*60*1000, max:300, standardHeaders:true }));
-app.use(express.json({ limit:'10mb' }));
+app.use(express.json({ limit:'10mb', verify:(req: any, _res: any, buf: Buffer) => { req.rawBody = buf.toString('utf8'); } }));
 app.use(express.urlencoded({ extended:true, limit:'10mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 

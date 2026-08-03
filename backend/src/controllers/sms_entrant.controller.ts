@@ -9,6 +9,7 @@
 // Activation de carte par SMS — zone rurale GSM
 // Format : RECHARGE [N°COMPTE] [REF-CARTE] [CODE4]
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import prisma from '../utils/prisma';
 import { verifyHashedCode } from '../utils/crypto';
 import { sendSms } from '../utils/sms';
@@ -16,6 +17,23 @@ import { enregistrerVersement } from '../services/epargne.service';
 
 const WEBHOOK_SECRET = process.env.SMS_WEBHOOK_SECRET || 'lcp_sms_secret_2026';
 function fmt(n: number) { return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' F'; }
+
+// Garde anti-force-brute : max 5 codes erronés par carte sur une fenêtre de 15 min
+const tentativeEchecs = new Map<string, { count: number; resetAt: number }>();
+function carteCodeAutorise(carteId: string): boolean {
+  const e = tentativeEchecs.get(carteId);
+  if (!e || Date.now() > e.resetAt) return true;
+  return e.count < 5;
+}
+function carteCodeEchec(carteId: string) {
+  const e = tentativeEchecs.get(carteId);
+  if (!e || Date.now() > e.resetAt) {
+    tentativeEchecs.set(carteId, { count: 1, resetAt: Date.now() + 15 * 60 * 1000 });
+  } else {
+    e.count += 1;
+  }
+}
+function carteCodeSucces(carteId: string) { tentativeEchecs.delete(carteId); }
 
 // [FIX1] Fonction unique de normalisation — supprime doublons normaliserTel/telNormalize
 function normalizeTel(tel: string): string {
@@ -106,14 +124,12 @@ async function traiterSmsRecharge(telExpéditeur: string, message: string) {
     return;
   }
 
-  // Recherche : référence complète OU ref courte (CSE-XXXXXXXX) OU partielle
+  // Recherche : référence complète OU référence courte exacte (pas de correspondance partielle)
   const carte = await prisma.carte.findFirst({
     where: {
       OR: [
         { reference: refCarte },
         { refCourt: refCarte },
-        { refCourt: { contains: refCarte } },
-        { reference: { contains: refCarte } },
       ]
     }
   });
@@ -128,14 +144,20 @@ async function traiterSmsRecharge(telExpéditeur: string, message: string) {
   if (code.length !== 4 || !/^\d{4}$/.test(code)) {
     await smsErreur(telExpéditeur, 'Code invalide. Le code fait 4 chiffres numeriques.'); return;
   }
+  if (!carteCodeAutorise(carte.id)) {
+    await smsErreur(telExpéditeur, 'Trop de tentatives de code. Reessayez dans 15 minutes.', false);
+    return;
+  }
   if (!verifyHashedCode(code, carte.codeValidation)) {
+    carteCodeEchec(carte.id);
     await prisma.auditLog.create({ data: { action:'SMS_RECHARGE_CODE_INVALIDE', entite:'Carte', entiteId:carte.id, actorId:compte.userId, details:{ telExpéditeur, refCarte } } });
     await smsErreur(telExpéditeur, `Code incorrect pour la carte ${refCarte}. Verifiez le verso.`); return;
   }
+  carteCodeSucces(carte.id);
 
   const [cfgFrais, cfgLcp] = await Promise.all([
-    prisma.config.findUnique({ where: { cle: 'FRAIS_TAUX' } }),
-    prisma.config.findUnique({ where: { cle: 'PART_LCP' } }),
+    prisma.siteConfig.findUnique({ where: { cle: 'FRAIS_TAUX' } }),
+    prisma.siteConfig.findUnique({ where: { cle: 'PART_LCP' } }),
   ]);
   const tauxFrais = parseFloat(cfgFrais?.valeur || '0.01');
   const tauxLcp   = parseFloat(cfgLcp?.valeur   || '0.006');
@@ -145,11 +167,29 @@ async function traiterSmsRecharge(telExpéditeur: string, message: string) {
   const partDist  = frais - partLcp;
   const net       = montant - frais;
 
-  const [transaction] = await prisma.$transaction([
-    prisma.transaction.create({ data: { reference:`TXN-SMS-${Date.now()}`, type:'DEPOT_CARTE', montant, frais, montantNet:net, statut:'SUCCES', compteId:compte.id, carteId:carte.id, description:`Recharge SMS — carte ${carte.reference}`, metadata:{ canal:'SMS', telExpéditeur, partLcp, partDist } } }),
-    prisma.compte.update({ where:{ id:compte.id }, data:{ solde:{ increment:net } } }),
-    prisma.carte.update({ where:{ id:carte.id }, data:{ statut:'UTILISEE', usedAt:new Date(), usedByCompteId:compte.id } }),
-  ]);
+  // [SÉCURITÉ] Consommation atomique de la carte — élimine la double-dépense
+  // (deux SMS concurrents : seul le premier remporte le updateMany conditionnel)
+  let transaction;
+  try {
+    transaction = await prisma.$transaction(async (tx) => {
+      const claim = await tx.carte.updateMany({
+        where: { id: carte.id, statut: { in: ['DISPONIBLE', 'VENDUE'] } },
+        data: { statut: 'UTILISEE', usedAt: new Date(), usedByCompteId: compte.id },
+      });
+      if (claim.count !== 1) return null; // carte déjà consommée par un autre canal
+      const t = await tx.transaction.create({ data: { reference:`TXN-SMS-${Date.now()}`, type:'DEPOT_CARTE', montant, frais, montantNet:net, statut:'SUCCES', compteId:compte.id, carteId:carte.id, description:`Recharge SMS — carte ${carte.reference}`, metadata:{ canal:'SMS', telExpéditeur, partLcp, partDist } } });
+      await tx.compte.update({ where:{ id:compte.id }, data:{ solde:{ increment:net } } });
+      return t;
+    });
+  } catch (err: any) {
+    // Rembobiner le statut si la transaction a échoué après le claim
+    await prisma.carte.updateMany({ where:{ id:carte.id, statut:'UTILISEE', usedByCompteId:compte.id }, data:{ statut:'DISPONIBLE', usedAt:null, usedByCompteId:null } }).catch(() => {});
+    throw err;
+  }
+  if (!transaction) {
+    await smsErreur(telExpéditeur, `Carte ${refCarte} non disponible ou deja utilisee.`, false);
+    return;
+  }
 
   await enregistrerVersement(compte.id, net, transaction.id).catch(() => {});
 
@@ -213,6 +253,12 @@ export async function whatsappEntrant(req: Request, res: Response) {
   // Repondre immediatement a Meta (eviter timeout 20s)
   res.status(200).json({ status: 'ok' });
 
+  // [SÉCURITÉ] Authentification du webhook avant tout traitement
+  if (!whatsappWebhookAutorise(req)) {
+    console.error('[WhatsApp Entrant] Webhook NON AUTHENTIFIE — requete rejetee. Configurez WHATSAPP_APP_SECRET (Railway + Meta) ou WHATSAPP_WEBHOOK_SECRET.');
+    return;
+  }
+
   try {
     const body = req.body;
 
@@ -239,4 +285,24 @@ export async function whatsappEntrant(req: Request, res: Response) {
   } catch (err: any) {
     console.error('[WhatsApp Entrant] Erreur:', err?.message);
   }
+}
+
+// Authentification du webhook WhatsApp : signature HMAC Meta (recommandé)
+// ou en secours un secret simple (header x-webhook-secret). Fail-closed.
+function whatsappWebhookAutorise(req: Request): boolean {
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+  if (appSecret) {
+    const signature = req.headers['x-hub-signature-256'] as string | undefined;
+    if (!signature) return false;
+    const raw = (req as any).rawBody ?? JSON.stringify(req.body ?? {});
+    const attendu = 'sha256=' + crypto.createHmac('sha256', appSecret).update(raw).digest('hex');
+    const a = Buffer.from(signature, 'utf8');
+    const b = Buffer.from(attendu, 'utf8');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+  const secret = process.env.WHATSAPP_WEBHOOK_SECRET;
+  if (secret) {
+    return (req.headers['x-webhook-secret'] || req.query.secret) === secret;
+  }
+  return false;
 }

@@ -8,6 +8,8 @@ function genRef() { return `VIR-${Date.now()}-${Math.random().toString(36).slice
 function genOTP() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 function fmt(n: number) { return new Intl.NumberFormat('fr-CI').format(n) + ' F'; }
 
+class ErreurVirement extends Error {}
+
 export async function initierVirement(req: Request, res: Response) {
   try {
     const { ribDest, montant, motif } = req.body;
@@ -74,22 +76,39 @@ export async function confirmerVirement(req: Request, res: Response) {
     if (virement.codeExpireAt && new Date() > virement.codeExpireAt) return res.status(400).json({ error:'Code OTP expiré. Recommencez.' });
     if (virement.codeConfirm !== codeOtp) return res.status(400).json({ error:'Code OTP incorrect' });
 
-    const solde  = Number(virement.compteSource.solde);
     const montant = Number(virement.montant);
-    if (solde < montant) return res.status(400).json({ error:`Solde insuffisant. Solde : ${fmt(solde)}` });
 
-    await prisma.$transaction([
-      prisma.compte.update({ where:{ id:virement.compteSourceId }, data:{ solde:{ decrement:montant } } }),
-      prisma.compte.update({ where:{ id:virement.compteDestId   }, data:{ solde:{ increment:montant } } }),
-      prisma.virement.update({ where:{ id:virementId }, data:{ statut:'VALIDE', codeConfirm:null, traiteLe:new Date() } }),
-      prisma.transaction.create({ data:{ reference:`TXN-VIR-${Date.now()}-S`, type:'VIREMENT_LCP', montant, frais:0, montantNet:-montant, statut:'SUCCES', compteId:virement.compteSourceId, description:`Virement vers ${virement.compteDest.user.prenom} ${virement.compteDest.user.nom} — ${virement.motif}`, metadata:{ virementId, sens:'DEBIT' } } }),
-      prisma.transaction.create({ data:{ reference:`TXN-VIR-${Date.now()}-D`, type:'VIREMENT_LCP', montant, frais:0, montantNet:montant, statut:'SUCCES', compteId:virement.compteDestId, description:`Virement de ${virement.compteSource.user.prenom} ${virement.compteSource.user.nom} — ${virement.motif}`, metadata:{ virementId, sens:'CREDIT' } } }),
-    ]);
+    // [SÉCURITÉ] Traitement atomique : claim conditionnel + débit/crédit dans la même
+    // transaction. Deux confirmations concurrentes : la première gagne, la seconde
+    // reçoit "déjà traité" (élimine le double-débit / double-crédit).
+    try {
+      await prisma.$transaction(async (tx) => {
+        const claim = await tx.virement.updateMany({
+          where: { id: virementId, statut: 'EN_ATTENTE', codeConfirm: codeOtp },
+          data:   { statut: 'VALIDE', codeConfirm: null, traiteLe: new Date() },
+        });
+        if (claim.count !== 1) throw new ErreurVirement('Virement déjà traité');
+
+        // Re-vérification du solde dans la transaction (données à jour)
+        const source = await tx.compte.findUnique({ where:{ id:virement.compteSourceId }, select:{ solde:true } });
+        if (!source || Number(source.solde) < montant) {
+          throw new ErreurVirement(`Solde insuffisant. Solde : ${fmt(Number(source?.solde || 0))}`);
+        }
+
+        await tx.compte.update({ where:{ id:virement.compteSourceId }, data:{ solde:{ decrement:montant } } });
+        await tx.compte.update({ where:{ id:virement.compteDestId   }, data:{ solde:{ increment:montant } } });
+        await tx.transaction.create({ data:{ reference:`TXN-VIR-${Date.now()}-S`, type:'VIREMENT_LCP', montant, frais:0, montantNet:-montant, statut:'SUCCES', compteId:virement.compteSourceId, description:`Virement vers ${virement.compteDest.user.prenom} ${virement.compteDest.user.nom} — ${virement.motif}`, metadata:{ virementId, sens:'DEBIT' } } });
+        await tx.transaction.create({ data:{ reference:`TXN-VIR-${Date.now()}-D`, type:'VIREMENT_LCP', montant, frais:0, montantNet:montant, statut:'SUCCES', compteId:virement.compteDestId, description:`Virement de ${virement.compteSource.user.prenom} ${virement.compteSource.user.nom} — ${virement.motif}`, metadata:{ virementId, sens:'CREDIT' } } });
+      });
+    } catch (err: any) {
+      if (err instanceof ErreurVirement) return res.status(409).json({ error: err.message });
+      throw err;
+    }
 
     await prisma.auditLog.create({ data:{ action:'VIREMENT_LCP', entite:'Virement', entiteId:virement.id, actorId:req.user!.userId, details:{ montant } } });
 
     const [src, dst] = [virement.compteSource, virement.compteDest];
-    const soldeNouveau = solde - montant;
+    const soldeNouveau = Number(src.solde) - montant;
     const soldeDest    = Number(dst.solde) + montant;
 
     // Notif expéditeur
@@ -112,8 +131,18 @@ export async function annulerVirement(req: Request, res: Response) {
   try {
     const virement = await prisma.virement.findUnique({ where:{ id:req.params.virementId } });
     if (!virement) return res.status(404).json({ error:'Virement introuvable' });
-    if (virement.statut !== 'EN_ATTENTE') return res.status(400).json({ error:'Ce virement ne peut plus être annulé' });
-    await prisma.virement.update({ where:{ id:req.params.virementId }, data:{ statut:'ANNULE' } });
+
+    // [SÉCURITÉ] Seul le propriétaire (compte source) ou un admin peut annuler
+    const compte = await prisma.compte.findUnique({ where:{ userId:req.user!.userId }, select:{ id:true } });
+    if (virement.compteSourceId !== compte?.id && !['MASTER','SUPER_ADMIN'].includes(req.user!.role))
+      return res.status(403).json({ error:'Ce virement ne vous appartient pas' });
+
+    // Claim conditionnel — empêche d'annuler un virement déjà traité (course)
+    const maj = await prisma.virement.updateMany({
+      where: { id:req.params.virementId, statut:'EN_ATTENTE' },
+      data:  { statut:'ANNULE' },
+    });
+    if (maj.count !== 1) return res.status(409).json({ error:'Ce virement ne peut plus être annulé' });
     return res.json({ success:true, message:'Virement annulé' });
   } catch(err:any) { return res.status(500).json({ error:err.message }); }
 }

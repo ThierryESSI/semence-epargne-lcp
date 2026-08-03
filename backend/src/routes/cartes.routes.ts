@@ -16,8 +16,8 @@ router.use(authenticate);
 // Master : émettre un lot de cartes
 router.post('/emettre',   authorize('MASTER'), emettreCartes);
 
-// Liste des cartes (avec filtre statut) — utilisée par l'onglet Émission
-router.get('/emettre', listerCartes);
+// Liste des cartes (avec filtre statut) — réservée aux rôles staff (pas les CLIENT)
+router.get('/emettre',    authorize('MASTER', 'SUPER_ADMIN', 'DISTRIBUTEUR_INTERNE', 'DISTRIBUTEUR_AGREE', 'CONSEILLER', 'CARTES_VOIR'), listerCartes);
 
 // Lots de cartes : liste + grillage (fraude)
 router.get('/lots',          authorize('MASTER', 'SUPER_ADMIN'), listerLots);
@@ -32,7 +32,7 @@ router.post('/activer',   authorize('CLIENT'), activerCarte);
 // Attribution aux distributeurs/conseillers
 router.put('/:id/attribuer', authorize('MASTER', 'DISTRIBUTEUR_INTERNE', 'DISTRIBUTEUR_AGREE'), attribuerCarte);
 
-// Liste des cartes
-router.get('/', listerCartes);
+// Liste des cartes — réservée aux rôles staff
+router.get('/', authorize('MASTER', 'SUPER_ADMIN', 'DISTRIBUTEUR_INTERNE', 'DISTRIBUTEUR_AGREE', 'CONSEILLER', 'CARTES_VOIR'), listerCartes);
 
 export default router;

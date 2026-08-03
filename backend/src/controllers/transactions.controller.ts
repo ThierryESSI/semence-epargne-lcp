@@ -9,6 +9,31 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 
+// Retourne la liste des comptesId visibles par l'utilisateur, ou null si tous
+async function comptesAutorises(role: string, userId: string): Promise<string[] | null> {
+  if (role === 'CLIENT') {
+    const compte = await prisma.compte.findUnique({ where: { userId }, select: { id: true } });
+    return compte ? [compte.id] : [];
+  }
+  if (role === 'CONSEILLER') {
+    const c = await prisma.conseiller.findFirst({ where: { userId }, select: { id: true } });
+    if (!c) return [];
+    const clients = await prisma.client.findMany({ where: { conseillerId: c.id }, select: { userId: true } });
+    const comptes = await prisma.compte.findMany({ where: { userId: { in: clients.map(x => x.userId) } }, select: { id: true } });
+    return comptes.map(x => x.id);
+  }
+  if (role === 'DISTRIBUTEUR_INTERNE' || role === 'DISTRIBUTEUR_AGREE') {
+    const d = await prisma.distributeur.findFirst({ where: { userId }, select: { id: true } });
+    if (!d) return [];
+    const conseillers = await prisma.conseiller.findMany({ where: { distributeurId: d.id }, select: { id: true } });
+    const clients = await prisma.client.findMany({ where: { conseillerId: { in: conseillers.map(x => x.id) } }, select: { userId: true } });
+    const comptes = await prisma.compte.findMany({ where: { userId: { in: clients.map(x => x.userId) } }, select: { id: true } });
+    return comptes.map(x => x.id);
+  }
+  // MASTER / SUPER_ADMIN : tous
+  return null;
+}
+
 export async function listerTransactions(req: Request, res: Response) {
   const page      = parseInt(req.query.page as string || '1');
   const limit     = parseInt(req.query.limit as string || '20');
@@ -26,28 +51,8 @@ export async function listerTransactions(req: Request, res: Response) {
     if (dateFin)   where.createdAt.lte = new Date(dateFin);
   }
 
-  const role = req.user!.role;
-
-  if (role === 'CLIENT') {
-    const compte = await prisma.compte.findUnique({ where: { userId: req.user!.userId } });
-    if (compte) where.compteId = compte.id;
-  } else if (role === 'CONSEILLER') {
-    const c = await prisma.conseiller.findFirst({ where: { userId: req.user!.userId } });
-    if (c) {
-      const clients = await prisma.client.findMany({ where: { conseillerId: c.id }, select: { userId: true } });
-      const comptes = await prisma.compte.findMany({ where: { userId: { in: clients.map(x => x.userId) } }, select: { id: true } });
-      where.compteId = { in: comptes.map(x => x.id) };
-    }
-  } else if (role === 'DISTRIBUTEUR_INTERNE' || role === 'DISTRIBUTEUR_AGREE') {
-    const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
-    if (d) {
-      const conseillers = await prisma.conseiller.findMany({ where: { distributeurId: d.id }, select: { id: true } });
-      const clients = await prisma.client.findMany({ where: { conseillerId: { in: conseillers.map(x => x.id) } }, select: { userId: true } });
-      const comptes = await prisma.compte.findMany({ where: { userId: { in: clients.map(x => x.userId) } }, select: { id: true } });
-      where.compteId = { in: comptes.map(x => x.id) };
-    }
-  }
-  // MASTER voit tout
+  const ids = await comptesAutorises(req.user!.role, req.user!.userId);
+  if (ids !== null) where.compteId = { in: ids };
 
   const [total, transactions] = await Promise.all([
     prisma.transaction.count({ where }),
@@ -72,5 +77,11 @@ export async function getTransaction(req: Request, res: Response) {
     }
   });
   if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
+
+  // [SÉCURITÉ] IDOR — vérifier que l'utilisateur a le droit de voir ce compte
+  const ids = await comptesAutorises(req.user!.role, req.user!.userId);
+  if (ids !== null && !ids.includes(tx.compteId))
+    return res.status(403).json({ error: 'Accès refusé à cette transaction' });
+
   return res.json({ data: tx });
 }

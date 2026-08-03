@@ -153,8 +153,8 @@ export async function activerCarte(req: Request, res: Response) {
     if (compte.statut !== 'ACTIF') { await prisma.carte.update({ where:{ id:carte.id }, data:{ activationLock:false, activationLockAt:null, statut:'VENDUE' } }); return res.status(403).json({ error:'Votre compte n\'est pas actif' }); }
 
     const [cfgFrais, cfgLcp] = await Promise.all([
-      prisma.config.findUnique({ where:{ cle:'FRAIS_TAUX' } }),
-      prisma.config.findUnique({ where:{ cle:'PART_LCP' } }),
+      prisma.siteConfig.findUnique({ where:{ cle:'FRAIS_TAUX' } }),
+      prisma.siteConfig.findUnique({ where:{ cle:'PART_LCP' } }),
     ]);
     const tauxFrais = parseFloat(cfgFrais?.valeur || '0.01');
     const tauxLcp   = parseFloat(cfgLcp?.valeur   || '0.006');

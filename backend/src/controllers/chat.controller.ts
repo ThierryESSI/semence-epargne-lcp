@@ -11,10 +11,12 @@ export async function getMessages(req: Request, res: Response) {
     if (role === 'CLIENT' && userId !== clientId) {
       return res.status(403).json({ error: 'Acces refuse' });
     }
+    // 100 messages les plus récents, retournés en ordre chronologique pour l'affichage
     const messages = await prisma.chatMessage.findMany({
-      where: { clientId }, orderBy: { createdAt: 'asc' }, take: 100,
+      where: { clientId }, orderBy: { createdAt: 'desc' }, take: 100,
       include: { expediteur: { select: { nom: true, prenom: true, role: true } } }
     });
+    messages.reverse();
     await prisma.chatMessage.updateMany({
       where: { clientId, lu: false, expediteurId: { not: userId } },
       data: { lu: true }
@@ -28,6 +30,10 @@ export async function envoyerMessage(req: Request, res: Response) {
     const { clientId } = req.params;
     const { contenu }  = req.body;
     if (!contenu?.trim()) return res.status(400).json({ error: 'Message vide' });
+    // [SÉCURITÉ] Un client ne peut écrire que dans SA conversation
+    if (req.user!.role === 'CLIENT' && req.user!.userId !== clientId) {
+      return res.status(403).json({ error: 'Acces refuse' });
+    }
     const message = await prisma.chatMessage.create({
       data: { clientId, expediteurId: req.user!.userId, contenu: contenu.trim(), lu: false },
       include: { expediteur: { select: { nom: true, prenom: true, role: true } } }

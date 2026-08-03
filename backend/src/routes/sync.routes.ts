@@ -7,9 +7,10 @@
 // ============================================================
 // backend/src/routes/sync.routes.ts
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 import { syncOfflineQueue } from '../controllers/sync.controller';
 
 const router = Router();
-router.post('/sync', authenticate, syncOfflineQueue);
+// [SÉCURITÉ] Seuls les rôles de terrain/staff peuvent rejouer des opérations offline
+router.post('/sync', authenticate, authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER'), syncOfflineQueue);
 export default router;
