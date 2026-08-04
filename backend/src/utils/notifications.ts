@@ -13,7 +13,7 @@ import prisma from './prisma';
 // ── WhatsApp via WhatsApp Business API (Meta) ou Twilio ──────────────
 // On utilise une API tierce simple (ex: callmebot.com pour démarrage,
 // ou WhatsApp Business API en production)
-async function sendWhatsApp(telephone: string, message: string): Promise<boolean> {
+export async function sendWhatsApp(telephone: string, message: string): Promise<boolean> {
   const wa = telephone.replace(/\D/g,'').replace(/^0/,'225');
   const apiKey = process.env.WHATSAPP_API_KEY;
   const apiUrl = process.env.WHATSAPP_API_URL; // ex: https://api.callmebot.com/whatsapp.php

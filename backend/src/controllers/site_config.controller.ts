@@ -26,6 +26,7 @@ const CONFIGS_DEFAUT = [
   { cle:'NOTIF_EMAIL_ACTIVE',    valeur:'true',                  type:'BOOLEAN', label:'Notifications Email actives' },
   { cle:'MAINTENANCE_MODE',      valeur:'false',                 type:'BOOLEAN', label:'Mode maintenance' },
   { cle:'NUMERO_SMS_LCP',   valeur:'',      type:'TEXT',    label:'Numero SMS zone rurale (ex: 0712345678)' },
+  { cle:'ALERTE_RECHARGE_TEL', valeur:'',   type:'TEXT',    label:'Numero alerte recharges SMS/WhatsApp (ex: 0708249583)' },
   { cle:'GALERIE_ACTIVE',   valeur:'false', type:'BOOLEAN', label:'Activer la galerie sur le site' },
 ];
 

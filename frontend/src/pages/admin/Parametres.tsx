@@ -14,7 +14,7 @@ const GROUPES: Record<string, string[]> = {
   'Taux et commissions':    ['FRAIS_TAUX','BONUS_3M_TAUX','BONUS_6M_TAUX','BONUS_12M_TAUX'],
   'Notifications':          ['NOTIF_WHATSAPP_ACTIVE','NOTIF_EMAIL_ACTIVE'],
   'Systeme':                ['MAINTENANCE_MODE'],
-  'Canal SMS zone rurale':  ['NUMERO_SMS_LCP'],
+  'Canal SMS zone rurale':  ['NUMERO_SMS_LCP','ALERTE_RECHARGE_TEL'],
   'Galerie photos':         ['GALERIE_ACTIVE'],
 };
 

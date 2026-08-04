@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import prisma from '../utils/prisma';
 import { verifyHashedCode } from '../utils/crypto';
 import { sendSms } from '../utils/sms';
+import { sendWhatsApp } from '../utils/notifications';
 import { enregistrerVersement } from '../services/epargne.service';
 
 const WEBHOOK_SECRET = process.env.SMS_WEBHOOK_SECRET || 'lcp_sms_secret_2026';
@@ -99,7 +100,29 @@ export async function webhookSmsEntrant(req: Request, res: Response) {
   );
 }
 
-async function traiterSmsRecharge(telExpéditeur: string, message: string) {
+// Alerte au MASTER/équipe à chaque recharge — numéro dédié configurable
+// dans Paramètres → Canal SMS zone rurale → ALERTE_RECHARGE_TEL
+async function alerterRechargeSMS(canal: string, compte: any, refCarte: string, montant: number, net: number, solde: number, reference: string) {
+  try {
+    const cfg = await prisma.siteConfig.findUnique({ where: { cle: 'ALERTE_RECHARGE_TEL' } });
+    const tel = cfg?.valeur?.trim();
+    if (!tel) return;
+    const message = `LCP SEMENCE: RECHARGE ${canal} — ${compte.user.prenom} ${compte.user.nom}
+Compte: ${compte.numeroCompte}
+Carte: ${refCarte}
+Montant: ${fmt(montant)}
+Net: ${fmt(net)}
+Solde: ${fmt(solde)}
+Ref: ${reference}`;
+    sendSms({ to: tel, message }).catch(() => {});
+    sendWhatsApp(tel, message).catch(() => {});
+    console.log(`[SMS Entrant] Alerte ${canal} envoyée → ${tel}`);
+  } catch (err: any) {
+    console.error('[SMS Entrant] Erreur alerte:', err?.message);
+  }
+}
+
+async function traiterSmsRecharge(telExpéditeur: string, message: string, canal = 'SMS') {
   const parsed = parserSMS(message);
   if (!parsed) {
     await smsErreur(telExpéditeur, 'Format invalide. Envoyez RECHARGE suivi de vos informations.');
@@ -177,7 +200,7 @@ async function traiterSmsRecharge(telExpéditeur: string, message: string) {
         data: { statut: 'UTILISEE', usedAt: new Date(), usedByCompteId: compte.id },
       });
       if (claim.count !== 1) return null; // carte déjà consommée par un autre canal
-      const t = await tx.transaction.create({ data: { reference:`TXN-SMS-${Date.now()}`, type:'DEPOT_CARTE', montant, frais, montantNet:net, statut:'SUCCES', compteId:compte.id, carteId:carte.id, description:`Recharge SMS — carte ${carte.reference}`, metadata:{ canal:'SMS', telExpéditeur, partLcp, partDist } } });
+      const t = await tx.transaction.create({ data: { reference:`TXN-SMS-${Date.now()}`, type:'DEPOT_CARTE', montant, frais, montantNet:net, statut:'SUCCES', compteId:compte.id, carteId:carte.id, description:`Recharge ${canal} — carte ${carte.reference}`, metadata:{ canal, telExpéditeur, partLcp, partDist } } });
       await tx.compte.update({ where:{ id:compte.id }, data:{ solde:{ increment:net } } });
       return t;
     });
@@ -196,8 +219,11 @@ async function traiterSmsRecharge(telExpéditeur: string, message: string) {
   const compteUpdated = await prisma.compte.findUnique({ where:{ id:compte.id } });
   const nouveauSolde  = Number(compteUpdated?.solde || 0);
 
-  await prisma.auditLog.create({ data: { action:'SMS_RECHARGE_SUCCES', entite:'Transaction', entiteId:transaction.id, actorId:compte.userId, details:{ canal:'SMS', montant, frais, net, refCarte, telExpéditeur } } });
+  await prisma.auditLog.create({ data: { action:'SMS_RECHARGE_SUCCES', entite:'Transaction', entiteId:transaction.id, actorId:compte.userId, details:{ canal, montant, frais, net, refCarte, telExpéditeur } } });
   console.log(`[SMS Entrant] ✅ ${compte.user.prenom} ${compte.user.nom} +${fmt(net)} | Solde: ${fmt(nouveauSolde)}`);
+
+  // [ALERTE] Prévenir le numéro dédié (MASTER/équipe) via SMS + WhatsApp
+  await alerterRechargeSMS(canal, compte, refCarte, montant, net, nouveauSolde, transaction.reference);
 
   await sendSms({ to:telExpéditeur, message:`LCP SEMENCE: Recharge OK ${compte.user.prenom} ${compte.user.nom}!
 Carte: ${refCarte}
@@ -280,7 +306,7 @@ export async function whatsappEntrant(req: Request, res: Response) {
 
     // Meme logique de traitement que le SMS GSM
     const telFormat = '+' + expediteur;
-    await traiterSmsRecharge(telFormat, texte);
+    await traiterSmsRecharge(telFormat, texte, 'WHATSAPP');
 
   } catch (err: any) {
     console.error('[WhatsApp Entrant] Erreur:', err?.message);
