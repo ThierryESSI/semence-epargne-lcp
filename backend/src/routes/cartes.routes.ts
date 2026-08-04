@@ -8,7 +8,7 @@
 // backend/src/routes/cartes.routes.ts
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
-import { emettreCartes, listerCartes, listerLots, grillerLot, verifierCarte, activerCarte, attribuerCarte } from '../controllers/cartes.controller';
+import { emettreCartes, listerCartes, listerLots, grillerLot, verifierCarte, activerCarte, attribuerCarte, supprimerCarte } from '../controllers/cartes.controller';
 
 const router = Router();
 router.use(authenticate);
@@ -31,6 +31,9 @@ router.post('/activer',   authorize('CLIENT'), activerCarte);
 
 // Attribution aux distributeurs/conseillers
 router.put('/:id/attribuer', authorize('MASTER', 'DISTRIBUTEUR_INTERNE', 'DISTRIBUTEUR_AGREE'), attribuerCarte);
+
+// Suppression d'une carte NON activée — réservée au SUPER_ADMIN uniquement
+router.delete('/:id', authorize('SUPER_ADMIN'), supprimerCarte);
 
 // Liste des cartes — réservée aux rôles staff
 router.get('/', authorize('MASTER', 'SUPER_ADMIN', 'DISTRIBUTEUR_INTERNE', 'DISTRIBUTEUR_AGREE', 'CONSEILLER', 'CARTES_VOIR'), listerCartes);

@@ -8,6 +8,7 @@
 // frontend/src/pages/admin/Cartes.tsx
 import { useState } from 'react';
 import { api } from '../../lib/api';
+import { useAuthStore } from '../../lib/store';
 import { usePaginated } from '../../hooks/useData';
 import { C } from '../../lib/design';
 import { PageHeader, TableWrapper, THead, TR, TD, Badge, Modal, FormGrid, Input, Select, Btn, StatCard, Spinner, Empty, Pagination, Alert, Icon, ICONS } from '../../components/ui/DS';
@@ -17,6 +18,8 @@ const MONTANTS = [500,1000,2000,5000,10000,25000,50000];
 const TABS = ['Toutes','Disponibles','Attribuées','Utilisées','Lots'];
 
 export default function Cartes() {
+  const { user }    = useAuthStore();
+  const isSA        = user?.role === 'SUPER_ADMIN';
   const [tab, setTab] = useState('');
   const { items, pagination, loading, page, setPage, search, setSearch, refetch } = usePaginated<any>('/cartes/emettre', tab && tab !== 'Toutes' && tab !== 'Lots' ? { statut: tab.toUpperCase().replace('É','E').replace('ES','E') } : {});
   const [showEmission, setShowEmission] = useState(false);
@@ -70,6 +73,16 @@ export default function Cartes() {
       const { data } = await api.post(`/cartes/lots/${l.id}/griller`, { motif });
       alert(data.message || 'Lot grillé');
       loadLots(lotsPage);
+    } catch(err:any) { alert(err.response?.data?.error || 'Erreur'); }
+  }
+
+  // Suppression d'une carte non activée — réservée au SUPER_ADMIN
+  async function handleSupprimerCarte(c:any) {
+    if (!confirm(`SUPPRIMER la carte ${c.reference} (${c.refCourt || ''}) ?\n\nCette action est IRREVERSIBLE.\nUniquement possible si la carte n'a jamais été activée.`)) return;
+    try {
+      const { data } = await api.delete(`/cartes/${c.id}`);
+      alert(data.message || 'Carte supprimée');
+      refetch();
     } catch(err:any) { alert(err.response?.data?.error || 'Erreur'); }
   }
 
@@ -141,10 +154,10 @@ export default function Cartes() {
       ) : (
         <>
           <TableWrapper>
-            <THead cols={['Code carte','Lot','Montant','Frais (1%)','Part LCP','Part Distrib.','Crédité','Code valid.','Statut','Date']}/>
+            <THead cols={['Code carte','Lot','Montant','Frais (1%)','Part LCP','Part Distrib.','Crédité','Code valid.','Statut','Date', ...(isSA?['Actions']:[])]}/>
             <tbody>
-              {loading ? <tr><td colSpan={10}><Spinner/></td></tr>
-              : items.length===0 ? <tr><td colSpan={10}><Empty msg="Aucune carte. Émettez votre premier lot."/></td></tr>
+              {loading ? <tr><td colSpan={11}><Spinner/></td></tr>
+              : items.length===0 ? <tr><td colSpan={11}><Empty msg="Aucune carte. Émettez votre premier lot."/></td></tr>
               : items.map((c:any)=>{
                 const mnt=Number(c.montant||0);
                 const frais=Math.ceil(mnt*0.01);
@@ -163,6 +176,16 @@ export default function Cartes() {
                     <TD mono muted>****</TD>
                     <TD><Badge v={c.statut?.toLowerCase()}/></TD>
                     <TD muted>{formatDate(c.createdAt,'dd/MM/yy')}</TD>
+                    {isSA && (
+                      <TD>
+                        {['DISPONIBLE','VENDUE'].includes(c.statut) ? (
+                          <button onClick={()=>handleSupprimerCarte(c)}
+                            style={{background:C.redPale,color:C.red,border:'none',borderRadius:6,padding:'4px 10px',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                            <Icon d={ICONS.trash} size={12} color={C.red} style={{verticalAlign:'-2px',marginRight:4}}/>Supprimer
+                          </button>
+                        ) : <span style={{color:C.textMuted,fontSize:11}}>—</span>}
+                      </TD>
+                    )}
                   </TR>
                 );
               })}

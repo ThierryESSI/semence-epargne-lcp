@@ -231,6 +231,39 @@ export async function attribuerCarte(req: Request, res: Response) {
   return res.json({ success:true, message:'Carte attribuée avec succès' });
 }
 
+// Supprimer une carte NON activée (réservé SUPER_ADMIN)
+// Une carte est supprimable uniquement si elle n'a jamais été utilisée/activée.
+export async function supprimerCarte(req: Request, res: Response) {
+  const { id } = req.params;
+  const carte = await prisma.carte.findUnique({ where: { id } });
+  if (!carte) return res.status(404).json({ error: 'Carte introuvable' });
+
+  if (!['DISPONIBLE', 'VENDUE'].includes(carte.statut)) {
+    return res.status(409).json({
+      error: carte.statut === 'UTILISEE'
+        ? 'Impossible de supprimer une carte déjà utilisée/activée'
+        : carte.statut === 'EN_COURS_ACTIVATION'
+          ? 'Activation en cours — attendez la fin du traitement'
+          : 'Cette carte est déjà annulée'
+    });
+  }
+
+  await prisma.$transaction([
+    prisma.carte.delete({ where: { id } }),
+    prisma.auditLog.create({
+      data: {
+        action: 'SUPPRESSION_CARTE',
+        entite: 'Carte',
+        entiteId: id,
+        actorId: req.user!.userId,
+        details: { reference: carte.reference, refCourt: carte.refCourt, montant: Number(carte.montant), statut: carte.statut, lotId: carte.lotId }
+      }
+    }),
+  ]);
+
+  return res.json({ success: true, message: `Carte ${carte.reference} supprimée` });
+}
+
 export async function listerCartes(req: Request, res: Response) {
   const page   = parseInt(req.query.page as string || '1');
   const limit  = parseInt(req.query.limit as string || '20');
