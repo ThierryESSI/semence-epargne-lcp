@@ -10,6 +10,17 @@ function fmt(n: number) {
   return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' FCFA';
 }
 
+// Message clair pour les erreurs Anthropic courantes (billing, clé, rate-limit)
+function erreurAnthropic(err: any): string {
+  const msg = String(err?.message || '');
+  if (msg.toLowerCase().includes('credit balance')) {
+    return 'Solde de crédits Anthropic insuffisant. Rechargez vos crédits sur console.anthropic.com → Plans & Billing.';
+  }
+  if (err?.status === 401) return 'Clé API Anthropic invalide (ANTHROPIC_API_KEY).';
+  if (err?.status === 429) return 'Limite de requêtes Anthropic atteinte. Réessayez dans quelques instants.';
+  return msg;
+}
+
 async function collecterDonnees(periode?: string) {
   const now   = new Date();
   // [SÉCURITÉ] Valider le format YYYY-MM pour éviter toute injection de date invalide
@@ -126,7 +137,7 @@ Fournis une analyse structuree en francais avec :
     });
   } catch(err: any) {
     if (err?.status === 401) return res.status(500).json({ error: 'Cle API Anthropic invalide' });
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: erreurAnthropic(err) });
   }
 }
 
@@ -150,7 +161,7 @@ Reponds en francais, de facon concise et precise.`
     });
     const reponse = message.content[0].type === 'text' ? message.content[0].text : '';
     return res.json({ success: true, data: { question, reponse, periode: donnees.periode } });
-  } catch(err: any) { return res.status(500).json({ error: err.message }); }
+  } catch(err: any) { return res.status(500).json({ error: erreurAnthropic(err) }); }
 }
 
 export async function historiqueAnalyses(req: Request, res: Response) {
