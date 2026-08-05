@@ -14,7 +14,7 @@ async function genRefCourtUnique(): Promise<string> {
     const exists = await prisma.carte.findUnique({ where: { refCourt: c } });
     if (!exists) return c;
   }
-  return `CSE-${Date.now().toString(36).toUpperCase()}`;
+  return generateRef('CSE');
 }
 
 export async function emettreCartes(req: Request, res: Response) {
@@ -166,7 +166,7 @@ export async function activerCarte(req: Request, res: Response) {
 
     // Transaction atomique — marquer UTILISEE en même temps que le crédit
     const [transaction] = await prisma.$transaction([
-      prisma.transaction.create({ data:{ reference:`TXN-${Date.now()}`, type:'DEPOT_CARTE', montant:mnt, frais, montantNet:net, statut:'SUCCES', compteId:compte.id, carteId:carte.id, description:`Dépôt carte ${carte.reference}`, metadata:{ canal:'APP', partLcp, partDist } } }),
+      prisma.transaction.create({ data:{ reference:generateRef('TXN'), type:'DEPOT_CARTE', montant:mnt, frais, montantNet:net, statut:'SUCCES', compteId:compte.id, carteId:carte.id, description:`Dépôt carte ${carte.reference}`, metadata:{ canal:'APP', partLcp, partDist } } }),
       prisma.compte.update({ where:{ id:compte.id }, data:{ solde:{ increment:net } } }),
       // Marque UTILISEE + libère le verrou atomiquement
       prisma.carte.update({ where:{ id:carte.id }, data:{ statut:'UTILISEE', activationLock:false, activationLockAt:null, usedAt:new Date(), usedByCompteId:compte.id } }),

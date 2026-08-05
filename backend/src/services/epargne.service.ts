@@ -8,6 +8,7 @@
 // backend/src/services/epargne.service.ts
 import prisma from '../utils/prisma';
 import { PalierBonus } from '@prisma/client';
+import { generateRef } from '../utils/crypto';
 
 export const PALIERS = {
   TROIS_MOIS:  { label:'3 mois',  dureeJours:90,  taux:0.035, tauxLabel:'3,5%', versementsMin:2,  dureeLabel:'3 mois'  },
@@ -60,7 +61,11 @@ export async function signalerRetrait(compteId: string) {
   return plan;
 }
 
-export async function verifierEtCalculerBonus(planId: string) {
+export type ResultatBonus =
+  | { eligible: true; bonusMontant: number; soldeAvecBonus: number; taux: string; palier: string }
+  | { eligible: false; raison: string };
+
+export async function verifierEtCalculerBonus(planId: string): Promise<ResultatBonus> {
   const plan = await prisma.planEpargne.findUnique({ where: { id: planId }, include: { compte: true } });
   if (!plan) throw new Error('Plan introuvable');
   if (plan.statut !== 'EN_COURS') return { eligible: false, raison: `Plan ${plan.statut}` };
@@ -81,12 +86,18 @@ export async function verifierEtCalculerBonus(planId: string) {
   const bonusMontant = Math.floor(solde * Number(plan.bonusTaux));
   const soldeAvecBonus = solde + bonusMontant;
   const config = PALIERS[plan.palier];
-  await prisma.$transaction([
-    prisma.transaction.create({ data: { reference: `BONUS-${Date.now()}`, type: 'BONUS_EPARGNE', montant: bonusMontant, frais: 0, montantNet: bonusMontant, statut: 'SUCCES', compteId: plan.compteId, description: `Bonus SEMENCE ${config.tauxLabel}` } }),
-    prisma.compte.update({ where: { id: plan.compteId }, data: { solde: { increment: bonusMontant } } }),
-    prisma.planEpargne.update({ where: { id: planId }, data: { statut: 'BONIFIE', bonusMontant, bonusVerse: true } }),
-  ]);
-  return { eligible: true, bonusMontant, soldeAvecBonus, taux: config.tauxLabel, palier: config.label };
+  // [SECURITE] Claim atomique : le premier appelant passe le plan en BONIFIE,
+  // les appels concurrents reçoivent « Bonus déjà versé » (élimine le double bonus).
+  return prisma.$transaction(async (tx) => {
+    const claim = await tx.planEpargne.updateMany({
+      where: { id: planId, statut: 'EN_COURS' },
+      data: { statut: 'BONIFIE', bonusMontant, bonusVerse: true },
+    });
+    if (claim.count === 0) return { eligible: false, raison: 'Bonus déjà versé' };
+    await tx.transaction.create({ data: { reference: generateRef('BONUS'), type: 'BONUS_EPARGNE', montant: bonusMontant, frais: 0, montantNet: bonusMontant, statut: 'SUCCES', compteId: plan.compteId, description: `Bonus SEMENCE ${config.tauxLabel}` } });
+    await tx.compte.update({ where: { id: plan.compteId }, data: { solde: { increment: bonusMontant } } });
+    return { eligible: true, bonusMontant, soldeAvecBonus, taux: config.tauxLabel, palier: config.label };
+  });
 }
 
 export function calculerProgression(plan: any) {

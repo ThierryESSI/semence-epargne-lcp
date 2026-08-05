@@ -25,10 +25,10 @@ router.use(authenticate);
 router.post('/souscrire',    authorize('CLIENT'), souscrire);
 // Voir mes plans
 router.get('/mes-plans',     authorize('CLIENT'), mesPlans);
-// Voir un plan détaillé
-router.get('/plan/:id',      getPlan);
-// Déclencher le bonus à l'échéance (client ou admin)
-router.post('/bonus/:planId', debloquerBonus);
+// Voir un plan détaillé (propriétaire CLIENT ou staff)
+router.get('/plan/:id',      authorize('CLIENT','MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE'), getPlan);
+// Déclencher le bonus à l'échéance (propriétaire CLIENT ou admin)
+router.post('/bonus/:planId', authorize('CLIENT','MASTER'), debloquerBonus);
 
 // ─── Routes ADMIN ─────────────────────────────────────────────────────
 // Tous les plans (Master)

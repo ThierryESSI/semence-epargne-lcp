@@ -11,7 +11,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../utils/prisma';
-import { verifyHashedCode } from '../utils/crypto';
+import { verifyHashedCode, generateRef } from '../utils/crypto';
 import { sendSms } from '../utils/sms';
 import { sendWhatsApp } from '../utils/notifications';
 import { enregistrerVersement } from '../services/epargne.service';
@@ -200,7 +200,7 @@ async function traiterSmsRecharge(telExpéditeur: string, message: string, canal
         data: { statut: 'UTILISEE', usedAt: new Date(), usedByCompteId: compte.id },
       });
       if (claim.count !== 1) return null; // carte déjà consommée par un autre canal
-      const t = await tx.transaction.create({ data: { reference:`TXN-SMS-${Date.now()}`, type:'DEPOT_CARTE', montant, frais, montantNet:net, statut:'SUCCES', compteId:compte.id, carteId:carte.id, description:`Recharge ${canal} — carte ${carte.reference}`, metadata:{ canal, telExpéditeur, partLcp, partDist } } });
+      const t = await tx.transaction.create({ data: { reference:generateRef('TXN'), type:'DEPOT_CARTE', montant, frais, montantNet:net, statut:'SUCCES', compteId:compte.id, carteId:carte.id, description:`Recharge ${canal} — carte ${carte.reference}`, metadata:{ canal, telExpéditeur, partLcp, partDist } } });
       await tx.compte.update({ where:{ id:compte.id }, data:{ solde:{ increment:net } } });
       return t;
     });

@@ -3,8 +3,8 @@ import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { sendSms } from '../utils/sms';
 import { notifier, emailTpl } from '../utils/notifications';
+import { generateRef } from '../utils/crypto';
 
-function genRef() { return `VIR-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`; }
 function genOTP() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 function fmt(n: number) { return new Intl.NumberFormat('fr-CI').format(n) + ' F'; }
 
@@ -37,7 +37,7 @@ export async function initierVirement(req: Request, res: Response) {
     const expireAt = new Date(Date.now() + 10 * 60 * 1000);
 
     const virement = await prisma.virement.create({
-      data:{ reference:genRef(), compteSourceId:compteSource.id, compteDestId:compteDest.id, montant, motif:motif||'', statut:'EN_ATTENTE', codeConfirm:otp, codeExpireAt:expireAt }
+      data:{ reference:generateRef('VIR'), compteSourceId:compteSource.id, compteDestId:compteDest.id, montant, motif:motif||'', statut:'EN_ATTENTE', codeConfirm:otp, codeExpireAt:expireAt }
     });
 
     // SMS OTP
@@ -97,8 +97,8 @@ export async function confirmerVirement(req: Request, res: Response) {
 
         await tx.compte.update({ where:{ id:virement.compteSourceId }, data:{ solde:{ decrement:montant } } });
         await tx.compte.update({ where:{ id:virement.compteDestId   }, data:{ solde:{ increment:montant } } });
-        await tx.transaction.create({ data:{ reference:`TXN-VIR-${Date.now()}-S`, type:'VIREMENT_LCP', montant, frais:0, montantNet:-montant, statut:'SUCCES', compteId:virement.compteSourceId, description:`Virement vers ${virement.compteDest.user.prenom} ${virement.compteDest.user.nom} — ${virement.motif}`, metadata:{ virementId, sens:'DEBIT' } } });
-        await tx.transaction.create({ data:{ reference:`TXN-VIR-${Date.now()}-D`, type:'VIREMENT_LCP', montant, frais:0, montantNet:montant, statut:'SUCCES', compteId:virement.compteDestId, description:`Virement de ${virement.compteSource.user.prenom} ${virement.compteSource.user.nom} — ${virement.motif}`, metadata:{ virementId, sens:'CREDIT' } } });
+        await tx.transaction.create({ data:{ reference:generateRef('TXN'), type:'VIREMENT_LCP', montant, frais:0, montantNet:-montant, statut:'SUCCES', compteId:virement.compteSourceId, description:`Virement vers ${virement.compteDest.user.prenom} ${virement.compteDest.user.nom} — ${virement.motif}`, metadata:{ virementId, sens:'DEBIT' } } });
+        await tx.transaction.create({ data:{ reference:generateRef('TXN'), type:'VIREMENT_LCP', montant, frais:0, montantNet:montant, statut:'SUCCES', compteId:virement.compteDestId, description:`Virement de ${virement.compteSource.user.prenom} ${virement.compteSource.user.nom} — ${virement.motif}`, metadata:{ virementId, sens:'CREDIT' } } });
       });
     } catch (err: any) {
       if (err instanceof ErreurVirement) return res.status(409).json({ error: err.message });

@@ -43,24 +43,39 @@ export async function mesPlans(req: Request, res: Response) {
 
 // ─── CLIENT : Plan détaillé ────────────────────────────────────────────
 // [FIX] getPlan ajouté (manquait et causait crash au démarrage)
+// [SECURITE] Contrôle de propriété : un CLIENT ne voit que ses propres plans
 export async function getPlan(req: Request, res: Response) {
   try {
     const plan = await prisma.planEpargne.findUnique({ where:{ id:req.params.id }, include:{ versements:{ orderBy:{ numeroVersement:'asc' } }, compte:{ include:{ user:{ select:{ nom:true,prenom:true,telephone:true } } } } } });
     if (!plan) return res.status(404).json({ error:'Plan introuvable' });
+    if (req.user!.role === 'CLIENT') {
+      const compte = await prisma.compte.findUnique({ where:{ userId:req.user!.userId } });
+      if (!compte || plan.compteId !== compte.id)
+        return res.status(403).json({ error:'Accès refusé : ce plan ne vous appartient pas' });
+    }
     return res.json({ data:{ ...plan, soldeDepart:Number(plan.soldeDepart), soldeActuel:Number(plan.soldeActuel), bonusTaux:Number(plan.bonusTaux), bonusMontant:plan.bonusMontant?Number(plan.bonusMontant):null, montantTotalVerse:Number(plan.montantTotalVerse), config:PALIERS[plan.palier], progression:plan.statut==='EN_COURS'?calculerProgression(plan):null } });
   } catch(err:any) { return res.status(500).json({ error:err.message }); }
 }
 
 // ─── Débloquer bonus ────────────────────────────────────────────────────
+// [SECURITE] Un CLIENT ne peut débloquer que son propre plan (le claim
+// atomique contre le double bonus est assuré dans verifierEtCalculerBonus)
 export async function debloquerBonus(req: Request, res: Response) {
   try {
     const { planId } = req.params;
+    const plan = await prisma.planEpargne.findUnique({ where:{ id:planId }, select:{ compteId:true } });
+    if (!plan) return res.status(404).json({ error:'Plan introuvable' });
+    if (req.user!.role === 'CLIENT') {
+      const compte = await prisma.compte.findUnique({ where:{ userId:req.user!.userId } });
+      if (!compte || plan.compteId !== compte.id)
+        return res.status(403).json({ error:'Accès refusé : ce plan ne vous appartient pas' });
+    }
     const result = await verifierEtCalculerBonus(planId);
     if (!result.eligible) return res.status(400).json({ error:result.raison, eligible:false });
-    const plan = await prisma.planEpargne.findUnique({ where:{ id:planId }, include:{ compte:{ include:{ user:true } } } });
-    if (plan?.compte?.user) {
-      const u = plan.compte.user;
-      sendSms({ to:u.telephone, message:tpl.bonusVerse(u.prenom, result.taux!, result.bonusMontant!, result.soldeAvecBonus!), userId:u.id }).catch(()=>{});
+    const planFull = await prisma.planEpargne.findUnique({ where:{ id:planId }, include:{ compte:{ include:{ user:true } } } });
+    if (planFull?.compte?.user) {
+      const u = planFull.compte.user;
+      sendSms({ to:u.telephone, message:tpl.bonusVerse(u.prenom, result.taux, result.bonusMontant, result.soldeAvecBonus), userId:u.id }).catch(()=>{});
     }
     return res.json({ success:true, ...result });
   } catch(err:any) { return res.status(500).json({ error:err.message }); }

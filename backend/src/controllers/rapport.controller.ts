@@ -5,6 +5,7 @@ import prisma from '../utils/prisma';
 import { uploadToCloudinary } from '../utils/upload';
 import { notifier, emailTpl } from '../utils/notifications';
 import PDFDocument from 'pdfkit';
+import * as XLSX from 'xlsx';
 
 function fmt(n: number) { return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' F'; }
 
@@ -159,29 +160,105 @@ export async function listerRapports(req: Request, res: Response) {
   } catch(err: any) { return res.status(500).json({ error: err.message }); }
 }
 
-// Rapport à la demande (export JSON → CSV côté frontend)
+// Rapport à la demande (export JSON ou XLSX)
+type Feuille = { nom: string; lignes: Record<string, any>[] };
+
+const dateFmt = (d: Date | string | null | undefined) =>
+  d ? new Date(d).toISOString().slice(0, 10) : '';
+
+const fmtF = (n: any) => (n === null || n === undefined ? '' : Number(n));
+
+async function collecterFeuilles(): Promise<Feuille[]> {
+  const [clients, transactions, virements, cartes] = await Promise.all([
+    prisma.user.findMany({
+      where: { role:'CLIENT' },
+      select: { nom:true, prenom:true, telephone:true, createdAt:true,
+        compte: { select:{ numeroCompte:true, rib:true, solde:true, statut:true } },
+        clients: { select:{ region:true, ville:true, commune:true } } },
+      orderBy: { createdAt:'desc' },
+    }),
+    prisma.transaction.findMany({
+      take: 1000,
+      orderBy: { createdAt:'desc' },
+      include: { compte:{ include:{ user:{ select:{ nom:true, prenom:true } } } } },
+    }),
+    prisma.virement.findMany({
+      take: 1000,
+      orderBy: { createdAt:'desc' },
+      include: {
+        compteSource:{ include:{ user:{ select:{ nom:true, prenom:true } } } },
+        compteDest:  { include:{ user:{ select:{ nom:true, prenom:true } } } },
+      },
+    }),
+    prisma.carte.findMany({
+      take: 1000,
+      orderBy: { createdAt:'desc' },
+      select: { reference:true, refCourt:true, montant:true, statut:true, lotId:true, createdAt:true },
+    }),
+  ]);
+
+  return [
+    { nom:'Clients', lignes: clients.map(c => ({
+      'Nom': c.nom || '', 'Prénom': c.prenom || '', 'Téléphone': c.telephone || '',
+      'Numéro compte': c.compte?.numeroCompte || '', 'RIB': c.compte?.rib || '',
+      'Solde (FCFA)': fmtF(c.compte?.solde), 'Statut compte': c.compte?.statut || '',
+      'Région': c.clients?.[0]?.region || '', 'Ville': c.clients?.[0]?.ville || '', 'Commune': c.clients?.[0]?.commune || '',
+      'Inscrit le': dateFmt(c.createdAt),
+    })) },
+    { nom:'Transactions', lignes: transactions.map(t => ({
+      'Référence': t.reference, 'Type': t.type,
+      'Client': `${t.compte?.user?.prenom || ''} ${t.compte?.user?.nom || ''}`.trim(),
+      'Montant (FCFA)': fmtF(t.montant), 'Frais (FCFA)': fmtF(t.frais), 'Net (FCFA)': fmtF(t.montantNet),
+      'Statut': t.statut, 'Date': dateFmt(t.createdAt),
+    })) },
+    { nom:'Recharges SMS', lignes: transactions.filter(t => t.type === 'DEPOT_CARTE').map(t => ({
+      'Référence': t.reference, 'Canal': (t.metadata as any)?.canal || '',
+      'Client': `${t.compte?.user?.prenom || ''} ${t.compte?.user?.nom || ''}`.trim(),
+      'Montant (FCFA)': fmtF(t.montant), 'Net (FCFA)': fmtF(t.montantNet),
+      'Description': t.description || '', 'Date': dateFmt(t.createdAt),
+    })) },
+    { nom:'Bonus Epargne', lignes: transactions.filter(t => t.type === 'BONUS_EPARGNE').map(t => ({
+      'Référence': t.reference, 'Client': `${t.compte?.user?.prenom || ''} ${t.compte?.user?.nom || ''}`.trim(),
+      'Bonus (FCFA)': fmtF(t.montant), 'Date': dateFmt(t.createdAt),
+    })) },
+    { nom:'Virements', lignes: virements.map(v => ({
+      'Référence': v.reference,
+      'Émetteur': `${v.compteSource?.user?.prenom || ''} ${v.compteSource?.user?.nom || ''}`.trim(),
+      'Bénéficiaire': `${v.compteDest?.user?.prenom || ''} ${v.compteDest?.user?.nom || ''}`.trim(),
+      'Montant (FCFA)': fmtF(v.montant), 'Statut': v.statut, 'Motif': v.motif || '',
+      'Traité le': dateFmt(v.traiteLe), 'Créé le': dateFmt(v.createdAt),
+    })) },
+    { nom:'Cartes', lignes: cartes.map(c => ({
+      'Référence': c.reference, 'Réf. courte': c.refCourt,
+      'Montant (FCFA)': fmtF(c.montant), 'Statut': c.statut,
+      'Lot': c.lotId || '', 'Émise le': dateFmt(c.createdAt),
+    })) },
+  ];
+}
+
 export async function exporterDonnees(req: Request, res: Response) {
   try {
     const { type = 'clients', format = 'json' } = req.query;
-    let data: any[] = [];
 
-    if (type === 'clients') {
-      data = await prisma.user.findMany({
-        where: { role:'CLIENT' },
-        select: { nom:true, prenom:true, telephone:true, createdAt:true,
-          compte: { select:{ numeroCompte:true, rib:true, solde:true, statut:true } },
-          clients: { select:{ region:true, ville:true, commune:true } } },
-        orderBy: { createdAt:'desc' }
-      });
-    } else if (type === 'transactions') {
-      data = await prisma.transaction.findMany({
-        take: 1000,
-        orderBy: { createdAt:'desc' },
-        select: { reference:true, type:true, montant:true, frais:true, montantNet:true, statut:true, createdAt:true,
-          compte:{ select:{ user:{ select:{ nom:true, prenom:true } } } } }
-      });
+    if (format === 'xlsx') {
+      const feuilles = await collecterFeuilles();
+      const wb = XLSX.utils.book_new();
+      for (const f of feuilles) {
+        const ws = XLSX.utils.json_to_sheet(f.lignes.length ? f.lignes : [{ 'Info':'Aucune donnée pour la période' }]);
+        ws['!cols'] = Object.keys(f.lignes[0] || { Info:'' }).map((_, i) => ({ wch: 24 }));
+        XLSX.utils.book_append_sheet(wb, ws, f.nom.slice(0, 31));
+      }
+      const buffer = XLSX.write(wb, { type:'buffer', bookType:'xlsx' }) as Buffer;
+      const filename = `semence_export_${new Date().toISOString().slice(0,10)}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(buffer);
     }
 
-    return res.json({ data, count: data.length });
+    const feuilles = await collecterFeuilles();
+    const feuille = feuilles.find(f => f.nom.toLowerCase() === String(type).toLowerCase())
+      || feuilles.find(f => ['clients','transactions'].includes(f.nom.toLowerCase()))
+      || feuilles[0];
+    return res.json({ data: feuille.lignes, count: feuille.lignes.length, type });
   } catch(err: any) { return res.status(500).json({ error: err.message }); }
 }
