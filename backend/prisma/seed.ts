@@ -1,7 +1,10 @@
 // backend/prisma/seed.ts — Production clean
 import { PrismaClient, Role, TypeCompte, StatutCompte, Permission } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 import { ensureUnarciInfra, unarciConfig } from '../src/utils/unarci';
+import { uploadToCloudinary } from '../src/utils/upload';
 const prisma = new PrismaClient();
 
 // Config site public par defaut
@@ -37,6 +40,68 @@ async function findFreeTelephone(base: string): Promise<string> {
     i++;
   }
   return tel;
+}
+
+// Galerie : photo de la signature de partenariat UNARTCI / Le Crédit Panafricain.
+// Idempotent : ne re-upload pas à chaque déploiement.
+const GALERIE_PHOTO_TITRE = 'Signature de partenariat UNARTCI & Le Crédit Panafricain';
+const GALERIE_PHOTO_DESCRIPTIF = `Le lundi 3 août 2026, au siège de l'Union Nationale des Artistes de Côte d'Ivoire sis à Cocody 2 Plateaux Mobil, il y a eu la signature de partenariat entre l'UNARTCI et Le Crédit Panafricain relativement à l'identification et à l'adhésion des artistes de Côte d'Ivoire.
+En effet, le Président Aimond Williams et le PDG Ahipo Georges ont scellé un partenariat entre les deux Organisations, en présence de responsables de l'UNARTCI, notamment le SG Diallo Ticouaï Vincent, le Directeur Exécutif Basile Blé, le Directeur de l'administration Boudou Célestin. Il revient donc à l'opérateur technique de procéder à l'identification des artistes issus de tous les corps de métier liés à l'art, d'organiser les adhésions et de confectionner les cartes de membres de l'UNARTCI, donnant droit à de nombreux avantages.
+Remerciant le Président Aimond Williams pour la confiance placée en sa structure, le PDG du Crédit Panafricain a tenu à le rassurer quant à son expérience acquise sur le terrain, et qui lui donne de disposer actuellement d'une base de données de 15 mille artistes, tout en escomptant atteindre plus de 150 milles artistes, d'ici la fin de l'année 2026.
+Poursuivant sur sa lancée, M. Ahipo a expliqué que relativement à l'opération d'adhésion, les créateurs vivant en Côte d'Ivoire et ceux de la diaspora n'auront pas besoin de se déplacer, d'autant plus qu'à partir de leurs smartphones, ils pourront s'inscrire en temps réel et payer leurs droits d'adhésion, en toute transparence.
+Il faut dire que le PDG du Crédit Panafricain était accompagné d'une délégation comprenant Mme Dogba Odette, responsable de la communication et M. Danou Djedoua, responsable financier.
+La cérémonie de signature de partenariat entre l'UNARTCI et Le Crédit Panafricain s'est achevée par la remise d'une imprimante HP Laser couleur à grand tirage et des polos et casquettes par le partenaire au SG Diallo Ticouaï Vincent qui, à son tour, les a confiés au Directeur de l'administration de l'UNARTCI, Boudou Célestin, ayant promis en faire bon usage.
+C'est assurément un partenariat fructueux qui augure des lendemains meilleurs pour les artistes de Côte d'Ivoire, sous le leadership du Président Aimond Williams, qui ne cesse de poser des actes concrets dans le sens du repositionnement de l'Union Nationale des Artistes de Côte d'Ivoire.`;
+
+async function seedGaleriePartenariat() {
+  const PUBLIC_ID = 'partenariat-unarci-lcp';
+  const existants = await prisma.siteConfig.findMany({
+    where: { cle: { startsWith: 'GALERIE_PHOTO_' } },
+    select: { cle: true, valeur: true },
+  });
+  const dejaAjoute = existants.some(c => {
+    try { return JSON.parse(c.valeur).publicId === `semenceep/galerie/${PUBLIC_ID}`; }
+    catch { return false; }
+  });
+
+  if (dejaAjoute) return;
+
+  const chemins = [
+    path.resolve(__dirname, '..', 'assets', 'galerie', `${PUBLIC_ID}.jpeg`),
+    path.resolve(__dirname, '..', '..', 'Ping.jpeg'),
+  ];
+  const fichier = chemins.find(f => fs.existsSync(f));
+  const credsCloud = process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET;
+
+  if (!fichier) return console.warn('⚠️ Galerie : image du partenariat introuvable (assets/galerie)');
+  if (!credsCloud) return console.warn('⚠️ Galerie : creds Cloudinary manquants, photo non ajoutée');
+
+  const { url, publicId } = await uploadToCloudinary(fs.readFileSync(fichier), { folder: 'galerie', publicId: PUBLIC_ID });
+
+  let maxOrdre = 0;
+  for (const c of existants) {
+    const n = parseInt(c.cle.replace('GALERIE_PHOTO_', ''), 10);
+    if (!Number.isNaN(n) && n > maxOrdre) maxOrdre = n;
+  }
+  const ordre = maxOrdre + 1;
+  const cle = `GALERIE_PHOTO_${String(ordre).padStart(3, '0')}`;
+  await prisma.siteConfig.upsert({
+    where: { cle },
+    update: {},
+    create: {
+      cle,
+      valeur: JSON.stringify({ url, publicId, titre: GALERIE_PHOTO_TITRE, descriptif: GALERIE_PHOTO_DESCRIPTIF, ordre }),
+      type: 'IMAGE',
+      label: `Photo galerie ${ordre}`,
+    },
+  });
+  // Active la galerie sur le site public
+  await prisma.siteConfig.upsert({
+    where: { cle: 'GALERIE_ACTIVE' },
+    update: { valeur: 'true' },
+    create: { cle: 'GALERIE_ACTIVE', valeur: 'true', type: 'BOOLEAN', label: 'Activer la galerie sur le site' },
+  });
+  console.log('✅ Galerie : photo du partenariat UNARTCI ajoutée et galerie activée');
 }
 
 async function main() {
@@ -88,6 +153,9 @@ async function main() {
     await prisma.siteConfig.upsert({ where:{ cle:cfg.cle }, update:{}, create:cfg }).catch(()=>{});
   }
   console.log('OK SiteConfig initialise');
+
+  // Galerie — photo du partenariat UNARTCI / Le Crédit Panafricain
+  await seedGaleriePartenariat();
 
   // Agence UNARCI (distributeur + conseiller + compte login)
   try {
