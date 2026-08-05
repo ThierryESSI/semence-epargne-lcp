@@ -1,6 +1,7 @@
 // backend/prisma/seed.ts — Production clean
 import { PrismaClient, Role, TypeCompte, StatutCompte, Permission } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { ensureUnarciInfra, unarciConfig } from '../src/utils/unarci';
 const prisma = new PrismaClient();
 
 // Config site public par defaut
@@ -87,6 +88,15 @@ async function main() {
     await prisma.siteConfig.upsert({ where:{ cle:cfg.cle }, update:{}, create:cfg }).catch(()=>{});
   }
   console.log('OK SiteConfig initialise');
+
+  // Agence UNARCI (distributeur + conseiller + compte login)
+  try {
+    const infra = await ensureUnarciInfra();
+    const cfgU = await unarciConfig();
+    console.log('✅ Agence UNARCI :', cfgU.UNARCI_DIST_LOGIN || infra.login, '/', cfgU.UNARCI_DIST_PWD || '(voir Paramètres)');
+  } catch (e: any) {
+    console.warn('⚠️ UNARCI non initialisé :', e.message);
+  }
 
   console.log('\n⚠️  IMPORTANT : Changez TOUS les mots de passe ci-dessus immédiatement !');
   console.log('\n📋 Hiérarchie des rôles :');

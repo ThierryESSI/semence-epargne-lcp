@@ -219,6 +219,10 @@ export default function HomePage() {
           <a href="#services" style={{ color: MUTED, textDecoration: 'none', fontSize: 13, fontWeight: 500, padding: '0 10px' }}>Services</a>
           <a href="#comment" style={{ color: MUTED, textDecoration: 'none', fontSize: 13, fontWeight: 500, padding: '0 10px' }}>Comment ça marche</a>
           <a href="#temoignages" style={{ color: MUTED, textDecoration: 'none', fontSize: 13, fontWeight: 500, padding: '0 10px' }}>Témoignages</a>
+          <button onClick={() => navigate('/unarci')}
+            style={{ background: 'rgba(246,90,4,0.1)', color: PRI, border: `1.5px solid ${PRI}`, borderRadius: 8, padding: '7px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Adhésion UNARCI
+          </button>
           <button onClick={() => navigate('/login')}
             style={{ background: 'transparent', color: SEC, border: `1.5px solid ${SEC}`, borderRadius: 8, padding: '7px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             Connexion
@@ -496,6 +500,10 @@ export default function HomePage() {
             <div onClick={() => navigate('/login')}
               style={{ fontSize: 12, marginBottom: 8, cursor: 'pointer', color: '#80C8FF' }}>
               Espace client
+            </div>
+            <div onClick={() => navigate('/unarci')}
+              style={{ fontSize: 12, marginBottom: 8, cursor: 'pointer', color: '#FFB380' }}>
+              Adhésion UNARCI
             </div>
             <a href="#formulaire" style={{ fontSize: 12, color: '#FFB380', textDecoration: 'none' }}>Faire une demande</a>
           </div>

@@ -24,6 +24,7 @@ import siteConfigRoutes   from './routes/site_config.routes';
 import galerieRoutes      from './routes/galerie.routes';
 import iaRapportsRoutes   from './routes/ia_rapports.routes';
 import chatRoutes         from './routes/chat.routes';
+import unarciRoutes       from './routes/unarci.routes';
 import { errorHandler }   from './middleware/error.middleware';
 import { initSiteConfig } from './controllers/site_config.controller';
 
@@ -64,6 +65,7 @@ app.use('/api/site-config',   siteConfigRoutes);
 app.use('/api/galerie',       galerieRoutes);
 app.use('/api/ia',            iaRapportsRoutes);
 app.use('/api/chat',          chatRoutes);
+app.use('/api/unarci',        unarciRoutes);
 
 // ── Health check ──────────────────────────────────────────────────
 app.get('/api/health', (_, res) => res.json({

@@ -7,6 +7,7 @@ import Layout from './components/ui/Layout';
 import { Spinner } from './components/ui/DS';
 
 const HomePage = lazy(() => import('./pages/public/HomePage'));
+const UnarciPage = lazy(() => import('./pages/public/UnarciPage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
 const AdminClients = lazy(() => import('./pages/admin/Clients'));
@@ -29,6 +30,7 @@ const IArapports = lazy(() => import('./pages/admin/IArapports'));
 const Chat       = lazy(() => import('./pages/admin/Chat'));
 const Galerie    = lazy(() => import('./pages/admin/Galerie'));
 const ClientChat = lazy(() => import('./pages/client/ClientChat'));
+const UnarciAgency = lazy(() => import('./pages/admin/UnarciAgency'));
 
 const ROLE_HOME: Record<string,string> = {
   SUPER_ADMIN:'/admin', MASTER:'/admin',
@@ -59,6 +61,7 @@ export default function App() {
       <Routes>
         {/* Page publique */}
         <Route path="/"      element={<HomePage />} />
+        <Route path="/unarci" element={<UnarciPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app"   element={<HomeRedirect />} />
 
@@ -77,6 +80,7 @@ export default function App() {
           <Route path="chat"          element={<Chat />} />
           <Route path="galerie"       element={<Protected roles={['SUPER_ADMIN','MASTER']}><Galerie /></Protected>} />
           <Route path="admins"        element={<Protected roles={['SUPER_ADMIN','MASTER']}><GestionAdmins /></Protected>} />
+          <Route path="unarci"        element={<Protected roles={['SUPER_ADMIN','MASTER','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE']}><UnarciAgency /></Protected>} />
           <Route path="offline"       element={<OfflinePage />} />
         </Route>
 

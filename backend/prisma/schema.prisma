@@ -87,6 +87,11 @@ enum StatutVirement {
   REJETE
   ANNULE
 }
+enum StatutAdhesion {
+  INSCRIT
+  ACTIF
+  REJETE
+}
 
 // ─── Permissions granulaires : MODULE_PROPRIETE ───────────────────────
 // Format : MODULE_ACTION  (ex: CLIENTS_VOIR, CLIENTS_AJOUTER...)
@@ -163,6 +168,7 @@ model User {
   distributeurs   Distributeur[]
   conseillers     Conseiller[]
   clients         Client[]
+  adherentsUnarci AdherentUnarci[]
   auditLogs       AuditLog[]
   notifications   Notification[]
   documents       Document[]
@@ -208,6 +214,7 @@ model Distributeur {
   user                 User             @relation(fields:[userId],references:[id])
   conseillers          Conseiller[]
   cartes               Carte[]
+  adherentsUnarci      AdherentUnarci[]
   parentDistributeur   Distributeur?    @relation("DistributeurAgences",fields:[parentDistributeurId],references:[id])
   agences              Distributeur[]   @relation("DistributeurAgences")
   @@map("distributeurs")
@@ -229,6 +236,7 @@ model Conseiller {
   user           User           @relation(fields:[userId],references:[id])
   distributeur   Distributeur   @relation(fields:[distributeurId],references:[id])
   clients        Client[]
+  adherentsUnarci AdherentUnarci[]
   cartesVendues  Carte[]
   @@map("conseillers")
 }
@@ -246,6 +254,71 @@ model Client {
   user         User       @relation(fields:[userId],references:[id])
   conseiller   Conseiller @relation(fields:[conseillerId],references:[id])
   @@map("clients")
+}
+
+// ─── Adhésion UNARCI ─────────────────────────────────────────────────
+// Formulaire public : l'adhérent devient automatiquement CLIENT sous
+// l'agence UNARCI, reçoit un SMS avec le numéro de paie LCP, puis le
+// conseiller valide le paiement manuellement (statut -> ACTIF).
+model AdherentUnarci {
+  id                     String         @id @default(cuid())
+  reference              String         @unique
+  statut                 StatutAdhesion @default(INSCRIT)
+  montantAdhesion        Decimal        @default(10000) @db.Decimal(15,2)
+  numeroPaie             String?
+  smsEnvoye              Boolean        @default(false)
+  activateAt             DateTime?
+
+  // Localisation
+  pays                   String         @default("CI")
+  region                 String
+  ville                  String
+  village                String?
+  campement              String?
+
+  // Etat civil
+  nomComplet             String
+  nomPere                String?
+  nomMere                String?
+  numeroCni              String?
+  numeroPasseport        String?
+  numeroPermis           String?
+
+  // Situation matrimoniale
+  situation              String? // MARIEE | CELIBATAIRE
+  nomConjoint            String?
+  naissanceConjoint      String?
+  nombreEnfantsCharge    Int            @default(0)
+  nomAyantDroit          String?
+  naissanceAyantDroit    String?
+
+  // Vie professionnelle
+  nomArtiste             String?
+  debutCarriere          String?
+  corpsMetier            String?
+
+  // Personne morale
+  typeStructure          String? // GROUPE | ASSOCIATION
+  nomStructure           String?
+  representantLegal      String?
+  dateCreationStructure  String?
+  specialites            String?
+
+  // Personne à contacter en cas d'urgence
+  urgenceNom             String?
+  urgenceContacts        String?
+  urgenceFiliation       String?
+
+  userId                 String
+  distributeurId         String
+  conseillerId           String
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  user                   User           @relation(fields:[userId],references:[id])
+  distributeur           Distributeur   @relation(fields:[distributeurId],references:[id])
+  conseiller             Conseiller     @relation(fields:[conseillerId],references:[id])
+  @@map("adherents_unarci")
 }
 
 model Carte {
