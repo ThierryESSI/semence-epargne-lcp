@@ -13,8 +13,8 @@ import { emettreCartes, listerCartes, listerLots, grillerLot, verifierCarte, act
 const router = Router();
 router.use(authenticate);
 
-// Master : émettre un lot de cartes
-router.post('/emettre',   authorize('MASTER'), emettreCartes);
+// Master : émettre un lot de cartes (ou compte avec permission CARTES_EMETTRE)
+router.post('/emettre',   authorize('MASTER', 'CARTES_EMETTRE'), emettreCartes);
 
 // Liste des cartes (avec filtre statut) — réservée aux rôles staff (pas les CLIENT)
 router.get('/emettre',    authorize('MASTER', 'SUPER_ADMIN', 'DISTRIBUTEUR_INTERNE', 'DISTRIBUTEUR_AGREE', 'CONSEILLER', 'CARTES_VOIR'), listerCartes);
