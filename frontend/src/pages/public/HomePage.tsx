@@ -175,6 +175,76 @@ function Simulateur() {
 }
 
 
+// ── Publication galerie (style réseaux sociaux) ────────────────────
+// Chaque photo devient un « post » : en-tête, titre, image en entier,
+// aperçu du texte avec bouton « Lire la suite » puis texte complet.
+function PostGalerie({ photo }: { photo: any }) {
+  const [ouvert, setOuvert] = useState(false);
+  const descriptif = photo.descriptif || '';
+  const long       = descriptif.length > 240;
+  const styleTexte: React.CSSProperties = {
+    margin: 0,
+    fontSize: 14.5,
+    color: '#3A4A63',
+    lineHeight: 1.8,
+    whiteSpace: 'pre-line',
+  };
+  const styleApercu: React.CSSProperties = long && !ouvert ? {
+    ...styleTexte,
+    display: '-webkit-box',
+    WebkitLineClamp: 4,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  } : styleTexte;
+
+  return (
+    <article style={{ background: WHITE, borderRadius: 16, overflow: 'hidden',
+      boxShadow: '0 6px 28px rgba(15,46,82,0.10)', border: `1px solid ${BORDER}` }}>
+      {/* En-tête du post */}
+      <div style={{ padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+          background: `linear-gradient(135deg, ${PRI}, ${SEC})`,
+          color: WHITE, fontWeight: 800, fontSize: 14,
+          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          LCP
+        </div>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: DARK }}>Le Crédit Panafricain</div>
+          <div style={{ fontSize: 11.5, color: MUTED }}>{photo.date || 'Actualité'}</div>
+        </div>
+      </div>
+
+      {/* Titre du post */}
+      {photo.titre && (
+        <h3 style={{ padding: '0 22px', margin: '0 0 14px', fontSize: 21, fontWeight: 800,
+          color: DARK, lineHeight: 1.35 }}>{photo.titre}</h3>
+      )}
+
+      {/* Image affichée en entier */}
+      {photo.url && (
+        <img src={photo.url} alt={photo.titre || 'Publication'}
+          style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }} />
+      )}
+
+      {/* Texte : aperçu + Lire la suite */}
+      {descriptif && (
+        <div style={{ padding: '16px 22px 22px' }}>
+          <p style={styleApercu}>{descriptif}</p>
+          {long && (
+            <button onClick={() => setOuvert(o => !o)}
+              style={{ background: 'none', border: 'none', padding: 0, marginTop: 12,
+                color: PRI, fontWeight: 700, fontSize: 14.5, cursor: 'pointer',
+                fontFamily: 'inherit', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+              {ouvert ? 'Réduire ↑' : 'Lire la suite ↓'}
+            </button>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
+
+
 // ── Composant principal ───────────────────────────────────────────
 export default function HomePage() {
   const navigate      = useNavigate();
@@ -401,30 +471,20 @@ export default function HomePage() {
 
       {/* ── GALERIE ───────────────────────────────────────── */}
       {cms.GALERIE_ACTIVE === 'true' && galeriePhotos.length > 0 && (
-        <section style={{ padding:'72px 6%', background:BG }}>
+        <section style={{ padding:'72px 6%', background: BG }}>
           <div style={{ textAlign:'center', marginBottom:48 }}>
             <div style={{ fontSize:11, fontWeight:700, color:PRI, letterSpacing:'.1em',
               textTransform:'uppercase', marginBottom:10 }}>Notre galerie</div>
             <h2 style={{ fontSize:32, fontWeight:900, margin:'0 0 12px' }}>Nos moments forts</h2>
+            <p style={{ color:MUTED, margin:0 }}>L'actualité du Le Crédit Panafricain</p>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:20 }}>
-            {galeriePhotos.map((photo:any) => (
-              <div key={photo.cle} style={{ borderRadius:16, overflow:'hidden',
-                boxShadow:'0 4px 20px rgba(15,46,82,0.1)', border:`1px solid ${BORDER}` }}>
-                <img src={photo.url} alt={photo.titre}
-                  style={{ width:'100%', height:220, objectFit:'cover' }}/>
-                {(photo.titre || photo.descriptif) && (
-                  <div style={{ padding:'14px 16px', background:WHITE }}>
-                    {photo.titre && (
-                      <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{photo.titre}</div>
-                    )}
-                    {photo.descriptif && (
-                      <div style={{ fontSize:12, color:MUTED }}>{photo.descriptif}</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+          <div style={{ maxWidth:760, margin:'0 auto', display:'flex', flexDirection:'column', gap:32 }}>
+            {galeriePhotos
+              .slice()
+              .sort((a:any,b:any) => (a.ordre||0) - (b.ordre||0))
+              .map((photo:any) => (
+                <PostGalerie key={photo.cle} photo={photo} />
+              ))}
           </div>
         </section>
       )}

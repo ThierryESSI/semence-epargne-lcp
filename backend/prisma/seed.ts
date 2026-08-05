@@ -90,7 +90,7 @@ async function seedGaleriePartenariat() {
     update: {},
     create: {
       cle,
-      valeur: JSON.stringify({ url, publicId, titre: GALERIE_PHOTO_TITRE, descriptif: GALERIE_PHOTO_DESCRIPTIF, ordre }),
+      valeur: JSON.stringify({ url, publicId, titre: GALERIE_PHOTO_TITRE, descriptif: GALERIE_PHOTO_DESCRIPTIF, date: '3 août 2026', ordre }),
       type: 'IMAGE',
       label: `Photo galerie ${ordre}`,
     },
