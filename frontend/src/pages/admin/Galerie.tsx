@@ -12,6 +12,7 @@ export default function Galerie() {
   const [error,     setError]     = useState('');
   const [success,   setSuccess]   = useState('');
   const [form,      setForm]      = useState({ titre:'', descriptif:'' });
+  const [selected,  setSelected]  = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { load(); }, []);
@@ -25,16 +26,19 @@ export default function Galerie() {
     finally { setLoading(false); }
   }
 
-  async function uploader(file: File) {
-    setUploading(true); setError('');
+  async function soumettre() {
+    if (!selected) { setError('Choisissez d\'abord une image'); return; }
+    setUploading(true); setError(''); setSuccess('');
     try {
       const fd = new FormData();
-      fd.append('image', file);
+      fd.append('image', selected);
       fd.append('titre', form.titre);
       fd.append('descriptif', form.descriptif);
       await api.post('/galerie', fd, { headers:{ 'Content-Type':'multipart/form-data' } });
-      setSuccess('Photo ajoutee avec succes');
+      setSuccess('Photo publiee sur le site semenceep.ci');
       setForm({ titre:'', descriptif:'' });
+      setSelected(null);
+      if (fileRef.current) fileRef.current.value = '';
       load();
     } catch(e: any) { setError(e.response?.data?.error || 'Erreur upload'); }
     finally { setUploading(false); }
@@ -73,10 +77,22 @@ export default function Galerie() {
           </div>
         </div>
         <input type="file" ref={fileRef} style={{ display:'none' }} accept="image/jpeg,image/png,image/webp"
-          onChange={e => e.target.files?.[0] && uploader(e.target.files[0])}/>
-        <Btn onClick={() => fileRef.current?.click()} loading={uploading}>
-          {uploading ? 'Upload en cours...' : 'Choisir une image et ajouter'}
-        </Btn>
+          onChange={e => { const f = e.target.files?.[0] || null; setSelected(f); setError(''); setSuccess(''); }}/>
+        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+          <Btn onClick={() => fileRef.current?.click()} disabled={uploading}>
+            Choisir une image
+          </Btn>
+          {selected && (
+            <span style={{ fontSize:13, color:C.textMuted }}>
+              Image choisie : <strong style={{ color:C.text }}>{selected.name}</strong>
+            </span>
+          )}
+        </div>
+        <div style={{ marginTop:16 }}>
+          <Btn onClick={soumettre} loading={uploading} disabled={!selected || uploading}>
+            {uploading ? 'Publication en cours...' : 'Soumettre la photo sur le site'}
+          </Btn>
+        </div>
       </div>
       {photos.length === 0 ? (
         <div style={{ background:'#fff', borderRadius:12, border:`1px solid ${C.border}`, padding:40, textAlign:'center', color:C.textMuted }}>
