@@ -30,6 +30,16 @@ const CONFIGS_DEFAUT = [
   { cle:'GALERIE_ACTIVE',   valeur:'false', type:'BOOLEAN', label:'Activer la galerie sur le site' },
 ];
 
+// [SÉCURITÉ] Whitelist des clés exposées publiquement (page d'accueil).
+// Les paramètres financiers internes (frais, parts, taux bonus, numéros
+// d'alerte) ne doivent JAMAIS fuiter côté public.
+const CLES_PUBLIQUES = new Set([
+  'SITE_NOM','SITE_SLOGAN','SITE_DESCRIPTION','SITE_TEL','SITE_EMAIL',
+  'SITE_WHATSAPP','SITE_ADRESSE','SITE_LOGO_URL','SITE_HERO_IMAGE',
+  'SITE_COULEUR_PRIMAIRE','SITE_COULEUR_SECONDAIRE','MAINTENANCE_MODE',
+  'GALERIE_ACTIVE',
+]);
+
 // Initialiser les configs par défaut (à appeler au démarrage)
 export async function initSiteConfig() {
   for (const cfg of CONFIGS_DEFAUT) {
@@ -42,11 +52,12 @@ export async function initSiteConfig() {
   console.log('SiteConfig initialisé');
 }
 
-// Lire toutes les configs (public — sans auth pour la page d'accueil)
+// Lire les configs publiques (page d'accueil — sans auth)
+// [SÉCURITÉ] Seules les clés de la whitelist CLES_PUBLIQUES sont renvoyées.
 export async function getConfigsPubliques(_req: Request, res: Response) {
   try {
     const configs = await prisma.siteConfig.findMany({ orderBy:{ cle:'asc' } });
-    const map = Object.fromEntries(configs.map(c => [c.cle, c.valeur]));
+    const map = Object.fromEntries(configs.filter(c => CLES_PUBLIQUES.has(c.cle)).map(c => [c.cle, c.valeur]));
     return res.json({ data: map });
   } catch(err: any) { return res.status(500).json({ error: err.message }); }
 }

@@ -3,8 +3,16 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { uploadToCloudinary, deleteFromCloudinary } from '../utils/upload';
+import { clientAppartientA } from '../utils/acces';
 
 const TYPES_VALIDES = ['CNI_RECTO','CNI_VERSO','PHOTO_FACIALE','AUTRE'];
+
+// [SÉCURITÉ] Vérifie que l'acteur a le droit d'accéder aux documents de ce userId
+async function accesAutorise(userId: string, role: string, actorUserId: string): Promise<boolean> {
+  if (role === 'MASTER' || role === 'SUPER_ADMIN') return true;
+  if (role === 'CLIENT') return userId === actorUserId;
+  return clientAppartientA(userId, role, actorUserId);
+}
 
 // Upload un document pour un client
 export async function uploadDocument(req: Request, res: Response) {
@@ -15,6 +23,8 @@ export async function uploadDocument(req: Request, res: Response) {
     if (!req.file) return res.status(400).json({ error: 'Fichier requis' });
     if (!TYPES_VALIDES.includes(type))
       return res.status(400).json({ error: `Type invalide. Valeurs : ${TYPES_VALIDES.join(', ')}` });
+    if (!(await accesAutorise(userId, req.user!.role, req.user!.userId)))
+      return res.status(403).json({ error: 'Accès refusé : ce client ne dépend pas de votre réseau' });
 
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, nom: true } });
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
@@ -47,6 +57,8 @@ export async function uploadDocument(req: Request, res: Response) {
 export async function getDocuments(req: Request, res: Response) {
   try {
     const { userId } = req.params;
+    if (!(await accesAutorise(userId, req.user!.role, req.user!.userId)))
+      return res.status(403).json({ error: 'Accès refusé : ce client ne dépend pas de votre réseau' });
     const docs = await prisma.document.findMany({
       where: { userId }, orderBy: { createdAt: 'desc' },
       select: { id:true, type:true, url:true, taille:true, createdAt:true }
@@ -61,6 +73,8 @@ export async function deleteDocument(req: Request, res: Response) {
     const { id } = req.params;
     const doc = await prisma.document.findUnique({ where: { id } });
     if (!doc) return res.status(404).json({ error: 'Document introuvable' });
+    if (!(await accesAutorise(doc.userId, req.user!.role, req.user!.userId)))
+      return res.status(403).json({ error: 'Accès refusé' });
     await deleteFromCloudinary(doc.publicId);
     await prisma.document.delete({ where: { id } });
     await prisma.auditLog.create({ data: { action:'SUPPRESSION_DOCUMENT', entite:'Document', entiteId:id, actorId:req.user!.userId, details:{ type:doc.type } } });

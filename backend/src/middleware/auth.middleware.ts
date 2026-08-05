@@ -21,15 +21,19 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return res.status(401).json({ error: 'Token invalide ou expiré' });
   const user = await prisma.user.findUnique({
     where:  { id: payload.userId },
-    select: { id: true, actif: true, permissions: true }
+    select: { id: true, email: true, telephone: true, role: true, actif: true, permissions: true }
   });
   if (!user || !user.actif)
     return res.status(403).json({ error: 'Compte inactif ou introuvable' });
+  // [SÉCURITÉ] On revalide le rôle et les permissions depuis la base :
+  // les rétrogradations de rôle ou révocations ne prennent effet qu'à la
+  // prochaine connexion (le token reste signé), on ne se fie JAMAIS au
+  // contenu du token pour l'autorisation.
   req.user = {
     userId:      payload.userId,
-    email:       payload.email,
-    role:        payload.role,
-    telephone:   payload.telephone,
+    email:       user.email,
+    role:        user.role,
+    telephone:   user.telephone,
     permissions: user.permissions as string[],
   };
   next();

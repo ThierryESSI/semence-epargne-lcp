@@ -12,6 +12,6 @@ import { listerClients, getClient } from '../controllers/clients.controller';
 
 const router = Router();
 router.use(authenticate);
-router.get('/', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER'), listerClients);
-router.get('/:id', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER'), getClient);
+router.get('/', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER','CLIENTS_VOIR'), listerClients);
+router.get('/:id', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER','CLIENTS_DETAILS'), getClient);
 export default router;

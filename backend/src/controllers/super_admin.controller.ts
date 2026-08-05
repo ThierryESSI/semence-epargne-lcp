@@ -1,6 +1,7 @@
 // backend/src/controllers/super_admin.controller.ts
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 import prisma from '../utils/prisma';
 import { Role, Permission } from '@prisma/client';
 
@@ -10,6 +11,7 @@ export const MODULES_PERMISSIONS: Record<string, { label: string; permissions: {
     label: 'Clients',
     permissions: [
       { code: 'CLIENTS_VOIR',      label: 'Voir les clients' },
+      { code: 'CLIENTS_DETAILS',   label: 'Voir la fiche détaillée d\'un client' },
       { code: 'CLIENTS_AJOUTER',   label: 'Ajouter un client' },
       { code: 'CLIENTS_MODIFIER',  label: 'Modifier un client' },
       { code: 'CLIENTS_SUPPRIMER', label: 'Supprimer un client' },
@@ -19,15 +21,17 @@ export const MODULES_PERMISSIONS: Record<string, { label: string; permissions: {
     label: 'Distributeurs',
     permissions: [
       { code: 'DISTRIBUTEURS_VOIR',      label: 'Voir les distributeurs' },
+      { code: 'DISTRIBUTEURS_DETAILS',   label: 'Voir la fiche détaillée d\'un distributeur' },
       { code: 'DISTRIBUTEURS_AJOUTER',   label: 'Ajouter un distributeur' },
       { code: 'DISTRIBUTEURS_MODIFIER',  label: 'Modifier un distributeur' },
       { code: 'DISTRIBUTEURS_SUPPRIMER', label: 'Supprimer un distributeur' },
     ]
   },
   CONSEILLERS: {
-    label: 'Conseillers',
+    label: 'Conseillers Clientèle',
     permissions: [
       { code: 'CONSEILLERS_VOIR',      label: 'Voir les conseillers' },
+      { code: 'CONSEILLERS_DETAILS',   label: 'Voir la fiche détaillée d\'un conseiller' },
       { code: 'CONSEILLERS_AJOUTER',   label: 'Ajouter un conseiller' },
       { code: 'CONSEILLERS_MODIFIER',  label: 'Modifier un conseiller' },
       { code: 'CONSEILLERS_SUPPRIMER', label: 'Supprimer un conseiller' },
@@ -118,6 +122,9 @@ export async function creerAdmin(req: Request, res: Response) {
     const rolesAdmin: Role[] = ['MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER'];
     if (!rolesAdmin.includes(role as Role))
       return res.status(400).json({ error: `Role invalide. Valeurs : ${rolesAdmin.join(', ')}` });
+    // [SÉCURITÉ] La création d'un compte MASTER est réservée aux SUPER_ADMIN
+    if (role === 'MASTER' && req.user!.role !== 'SUPER_ADMIN')
+      return res.status(403).json({ error: 'Seul le SuperAdmin peut créer un compte MASTER' });
     const permsInvalides = permissions.filter((p:string) => !ALL_PERMISSIONS.includes(p as Permission));
     if (permsInvalides.length > 0)
       return res.status(400).json({ error: `Permissions invalides : ${permsInvalides.join(', ')}` });
@@ -127,7 +134,7 @@ export async function creerAdmin(req: Request, res: Response) {
     ]);
     if (exEmail) return res.status(409).json({ error: 'Cet email est deja utilise' });
     if (exTel)   return res.status(409).json({ error: 'Ce telephone est deja utilise' });
-    const pwd  = motDePasse || `LCP-Admin-${Math.random().toString(36).slice(2,8).toUpperCase()}!`;
+    const pwd  = motDePasse || `LCP-Admin-${randomInt(100000, 1000000)}`;
     const hash = await bcrypt.hash(pwd, 12);
     const user = await prisma.user.create({
       data: { email, telephone, passwordHash:hash, nom:nom.toUpperCase().trim(), prenom:prenom.trim(), role:role as Role, actif:true, permissions:permissions as Permission[], creePar:req.user!.userId }
@@ -148,6 +155,9 @@ export async function modifierPermissions(req: Request, res: Response) {
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
     if (user.role === 'SUPER_ADMIN') return res.status(403).json({ error: 'Permissions du SuperAdmin non modifiables' });
     if (user.role === 'CLIENT')      return res.status(403).json({ error: 'Les clients n\'ont pas de permissions admin' });
+    // [SÉCURITÉ] Seul le SuperAdmin gère les comptes MASTER
+    if (user.role === 'MASTER' && req.user!.role !== 'SUPER_ADMIN')
+      return res.status(403).json({ error: 'Seul le SuperAdmin peut modifier un compte MASTER' });
     await prisma.user.update({ where: { id: userId }, data: { permissions: permissions as Permission[] } });
     await prisma.auditLog.create({ data: { action:'MAJ_PERMISSIONS', entite:'User', entiteId:userId, actorId:req.user!.userId, details:{ permissions } } });
     return res.json({ success:true, message:'Permissions mises a jour', data:{ userId, permissions } });
@@ -161,6 +171,9 @@ export async function toggleAdmin(req: Request, res: Response) {
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
     if (user.role === 'SUPER_ADMIN') return res.status(403).json({ error: 'Impossible de desactiver le SuperAdmin' });
     if (user.role === 'CLIENT')      return res.status(403).json({ error: 'Utilisez le module clients' });
+    // [SÉCURITÉ] Seul le SuperAdmin gère les comptes MASTER
+    if (user.role === 'MASTER' && req.user!.role !== 'SUPER_ADMIN')
+      return res.status(403).json({ error: 'Seul le SuperAdmin peut activer/désactiver un compte MASTER' });
     const nouvelEtat = !user.actif;
     await prisma.user.update({ where: { id: userId }, data: { actif: nouvelEtat } });
     await prisma.auditLog.create({ data: { action: nouvelEtat?'ACTIVATION_ADMIN':'DESACTIVATION_ADMIN', entite:'User', entiteId:userId, actorId:req.user!.userId } });
@@ -175,7 +188,9 @@ export async function resetPasswordAdmin(req: Request, res: Response) {
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
     if (user.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN')
       return res.status(403).json({ error: 'Seul le SuperAdmin peut reinitialiser son mot de passe' });
-    const newPwd  = `LCP-${Math.random().toString(36).slice(2,6).toUpperCase()}-${Math.floor(1000+Math.random()*9000)}!`;
+    if (user.role === 'MASTER' && req.user!.role !== 'SUPER_ADMIN')
+      return res.status(403).json({ error: 'Seul le SuperAdmin peut reinitialiser le mot de passe d\'un MASTER' });
+    const newPwd  = `LCP-${randomInt(100000, 1000000)}`;
     const newHash = await bcrypt.hash(newPwd, 12);
     await prisma.user.update({ where: { id: userId }, data: { passwordHash:newHash, refreshToken:null } });
     await prisma.auditLog.create({ data: { action:'RESET_PASSWORD_ADMIN', entite:'User', entiteId:userId, actorId:req.user!.userId } });
@@ -190,6 +205,9 @@ export async function supprimerAdmin(req: Request, res: Response) {
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
     if (user.role === 'SUPER_ADMIN') return res.status(403).json({ error: 'Impossible de supprimer le SuperAdmin' });
     if (user.role === 'CLIENT')      return res.status(403).json({ error: 'Utilisez le module clients' });
+    // [SÉCURITÉ] Seul le SuperAdmin peut supprimer un compte MASTER
+    if (user.role === 'MASTER' && req.user!.role !== 'SUPER_ADMIN')
+      return res.status(403).json({ error: 'Seul le SuperAdmin peut supprimer un compte MASTER' });
     const [hasDistrib, hasConseiller] = await Promise.all([
       prisma.distributeur.count({ where: { userId } }),
       prisma.conseiller.count({ where: { userId } }),
@@ -355,6 +373,9 @@ export async function supprimerUserExpert(req: Request, res: Response) {
       return res.status(403).json({ error: 'Impossible de supprimer votre propre compte' });
     if (user.role === 'SUPER_ADMIN')
       return res.status(403).json({ error: 'Le compte SuperAdmin ne peut pas être supprimé' });
+    // [SÉCURITÉ] Seul le SuperAdmin peut supprimer un compte MASTER
+    if (user.role === 'MASTER' && req.user!.role !== 'SUPER_ADMIN')
+      return res.status(403).json({ error: 'Seul le SuperAdmin peut supprimer un compte MASTER' });
 
     await supprimerUserComplet(userId);
     await traceAudit('SUPPRESSION_USER', 'User', userId, req.user!.userId, { email: user.email, role: user.role });

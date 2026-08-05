@@ -18,40 +18,53 @@ export const PALIERS = {
 
 export async function creerPlanEpargne(compteId: string, palier: PalierBonus) {
   const config = PALIERS[palier];
-  const compte = await prisma.compte.findUnique({ where: { id: compteId } });
-  if (!compte) throw new Error('Compte introuvable');
-  if (compte.statut !== 'ACTIF') throw new Error('Compte inactif');
-  const planActif = await prisma.planEpargne.findFirst({ where: { compteId, statut: 'EN_COURS' } });
-  if (planActif) throw new Error('Un plan épargne est déjà en cours sur ce compte');
-  const dateDebut = new Date();
-  const dateEcheance = new Date();
-  dateEcheance.setDate(dateEcheance.getDate() + config.dureeJours);
 
-  // [ALIGNEMENT] Le taux est piloté par l'admin (Paramètres → Taux bonus) via SiteConfig,
-  // avec repli sur les valeurs par défaut si non configuré.
-  const cleTaux = { TROIS_MOIS: 'BONUS_3M_TAUX', SIX_MOIS: 'BONUS_6M_TAUX', DOUZE_MOIS: 'BONUS_12M_TAUX' }[palier];
-  const cfgTaux = cleTaux ? await prisma.siteConfig.findUnique({ where: { cle: cleTaux } }) : null;
-  const taux = cfgTaux && parseFloat(cfgTaux.valeur) > 0 ? parseFloat(cfgTaux.valeur) : config.taux;
+  // [SÉCURITÉ] Anti-course : deux souscriptions simultanées sur le même compte
+  // ne doivent pas créer deux plans actifs (vérification + création atomiques).
+  return prisma.$transaction(async (tx) => {
+    const compte = await tx.compte.findUnique({ where: { id: compteId } });
+    if (!compte) throw new Error('Compte introuvable');
+    if (compte.statut !== 'ACTIF') throw new Error('Compte inactif');
+    const planActif = await tx.planEpargne.findFirst({ where: { compteId, statut: 'EN_COURS' } });
+    if (planActif) throw new Error('Un plan épargne est déjà en cours sur ce compte');
+    const dateDebut = new Date();
+    const dateEcheance = new Date();
+    dateEcheance.setDate(dateEcheance.getDate() + config.dureeJours);
 
-  return prisma.planEpargne.create({
-    data: { compteId, palier, statut: 'EN_COURS', dateDebut, dateEcheance,
-      soldeDepart: compte.solde, soldeActuel: compte.solde, bonusTaux: taux,
-      nbVersementsRequis: config.versementsMin, nbVersementsEffectues: 0, montantTotalVerse: 0 }
+    // [ALIGNEMENT] Le taux est piloté par l'admin (Paramètres → Taux bonus) via SiteConfig,
+    // avec repli sur les valeurs par défaut si non configuré.
+    const cleTaux = { TROIS_MOIS: 'BONUS_3M_TAUX', SIX_MOIS: 'BONUS_6M_TAUX', DOUZE_MOIS: 'BONUS_12M_TAUX' }[palier];
+    const cfgTaux = cleTaux ? await tx.siteConfig.findUnique({ where: { cle: cleTaux } }) : null;
+    const taux = cfgTaux && parseFloat(cfgTaux.valeur) > 0 ? parseFloat(cfgTaux.valeur) : config.taux;
+
+    return tx.planEpargne.create({
+      data: { compteId, palier, statut: 'EN_COURS', dateDebut, dateEcheance,
+        soldeDepart: compte.solde, soldeActuel: compte.solde, bonusTaux: taux,
+        nbVersementsRequis: config.versementsMin, nbVersementsEffectues: 0, montantTotalVerse: 0 }
+    });
   });
 }
 
 export async function enregistrerVersement(compteId: string, montant: number, transactionId?: string) {
-  const plan = await prisma.planEpargne.findFirst({ where: { compteId, statut: 'EN_COURS' } });
-  if (!plan) return null;
-  const nbActuel = plan.nbVersementsEffectues + 1;
-  const versement = await prisma.versementEpargne.create({
-    data: { planId: plan.id, transactionId, montant, numeroVersement: nbActuel }
+  // [SÉCURITÉ] Compteurs incrémentés atomiquement dans la même transaction :
+  // deux dépôts concurrents ne se perdent plus de mise à jour (nbVersementsEffectues).
+  return prisma.$transaction(async (tx) => {
+    const plan = await tx.planEpargne.findFirst({ where: { compteId, statut: 'EN_COURS' } });
+    if (!plan) return null;
+    const numero = (await tx.versementEpargne.count({ where: { planId: plan.id } })) + 1;
+    const versement = await tx.versementEpargne.create({
+      data: { planId: plan.id, transactionId, montant, numeroVersement: numero }
+    });
+    await tx.planEpargne.update({
+      where: { id: plan.id },
+      data: {
+        nbVersementsEffectues: { increment: 1 },
+        montantTotalVerse:     { increment: montant },
+        soldeActuel:           { increment: montant },
+      }
+    });
+    return versement;
   });
-  await prisma.planEpargne.update({
-    where: { id: plan.id },
-    data: { nbVersementsEffectues: nbActuel, montantTotalVerse: { increment: montant }, soldeActuel: { increment: montant } }
-  });
-  return versement;
 }
 
 export async function signalerRetrait(compteId: string) {

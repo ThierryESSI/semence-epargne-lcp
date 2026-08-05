@@ -5,7 +5,7 @@ import { creerDistributeur, listerDistributeurs, getDistributeur } from '../cont
 
 const router = Router();
 router.use(authenticate);
-router.post('/', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE'), creerDistributeur);
-router.get('/',  authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE'), listerDistributeurs);
-router.get('/:id', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE'), getDistributeur);
+router.post('/', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','DISTRIBUTEURS_AJOUTER'), creerDistributeur);
+router.get('/',  authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER','DISTRIBUTEURS_VOIR'), listerDistributeurs);
+router.get('/:id', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER','DISTRIBUTEURS_DETAILS'), getDistributeur);
 export default router;

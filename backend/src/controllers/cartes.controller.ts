@@ -19,7 +19,10 @@ async function genRefCourtUnique(): Promise<string> {
 
 export async function emettreCartes(req: Request, res: Response) {
   const { montant, quantite = 1, distributeurId, lot } = req.body;
-  if (!montant || montant < 200) return res.status(400).json({ error: 'Montant minimum : 200 FCFA' });
+  // [SÉCURITÉ] Montant strictement numérique (rejette NaN, chaînes, bornes hors limites)
+  const montantNum = Number(montant);
+  if (!Number.isFinite(montantNum) || montantNum < 200 || montantNum > 1000000)
+    return res.status(400).json({ error: 'Montant invalide (minimum 200 FCFA, maximum 1 000 000 FCFA)' });
   if (quantite < 1 || quantite > 500) return res.status(400).json({ error: 'Quantité entre 1 et 500' });
 
   const lotReference = (lot && String(lot).trim()) || generateLotRef();
@@ -27,7 +30,7 @@ export async function emettreCartes(req: Request, res: Response) {
   if (existeLot) return res.status(409).json({ error: `La référence de lot ${lotReference} existe déjà` });
 
   const lotRecord = await prisma.lotCarte.create({
-    data: { reference: lotReference, montant, quantite, distributeurId: distributeurId || null, creePar: req.user!.userId },
+    data: { reference: lotReference, montant: montantNum, quantite, distributeurId: distributeurId || null, creePar: req.user!.userId },
   });
 
   const cartes = [];
@@ -37,15 +40,15 @@ export async function emettreCartes(req: Request, res: Response) {
     const codeValidation = generateCode4();
     const codeHash       = hashCode(codeValidation);
     const carte = await prisma.carte.create({
-      data: { reference, refCourt, montant, qrCodeAuth:'', qrCodeEpargne:'', codeValidation:codeHash, distributeurId: distributeurId || null, lotId: lotRecord.id }
+      data: { reference, refCourt, montant: montantNum, qrCodeAuth:'', qrCodeEpargne:'', codeValidation:codeHash, distributeurId: distributeurId || null, lotId: lotRecord.id }
     });
     const { token: qrAuthToken, image: qrAuthImg }       = await generateQrAuth(carte.id, reference);
-    const { token: qrEpargneToken, image: qrEpargneImg } = await generateQrEpargne(carte.id, montant, reference);
+    const { token: qrEpargneToken, image: qrEpargneImg } = await generateQrEpargne(carte.id, montantNum, reference);
     await prisma.carte.update({ where:{ id:carte.id }, data:{ qrCodeAuth:qrAuthToken, qrCodeEpargne:qrEpargneToken } });
-    cartes.push({ id:carte.id, reference, refCourt, montant, codeValidation, qrAuthImage:qrAuthImg, qrEpargneImage:qrEpargneImg });
+    cartes.push({ id:carte.id, reference, refCourt, montant:montantNum, codeValidation, qrAuthImage:qrAuthImg, qrEpargneImage:qrEpargneImg });
   }
-  await prisma.auditLog.create({ data:{ action:'EMISSION_CARTES', entite:'Carte', entiteId:lotRecord.id, actorId:req.user!.userId, details:{ lot:lotReference, montant, quantite, distributeurId } } });
-  return res.status(201).json({ success:true, data:cartes, lot:{ id:lotRecord.id, reference:lotReference, montant, quantite } });
+  await prisma.auditLog.create({ data:{ action:'EMISSION_CARTES', entite:'Carte', entiteId:lotRecord.id, actorId:req.user!.userId, details:{ lot:lotReference, montant:montantNum, quantite, distributeurId } } });
+  return res.status(201).json({ success:true, data:cartes, lot:{ id:lotRecord.id, reference:lotReference, montant:montantNum, quantite } });
 }
 
 // Liste des lots de cartes avec statistiques

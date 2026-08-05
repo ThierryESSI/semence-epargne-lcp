@@ -30,6 +30,11 @@ import { initSiteConfig } from './controllers/site_config.controller';
 
 const app = express();
 
+// [SÉCURITÉ] L'API est derrière un reverse-proxy (Cloudflare/Nginx).
+// Sans ce réglage, req.ip vaut l'IP du proxy et les rate-limits par IP
+// (login, refresh, codes) deviennent globaux. '1' = un seul proxy de confiance.
+app.set('trust proxy', 1);
+
 // ── Sécurité ────────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },

@@ -7,8 +7,8 @@ import { uploadDocument, getDocuments, deleteDocument } from '../controllers/doc
 const router = Router();
 router.use(authenticate);
 
-router.post('/:userId',   authorize('MASTER','DISTRIBUTEUR_INTERNE','CONSEILLER','CLIENTS_AJOUTER','CLIENTS_MODIFIER'), upload.single('file'), uploadDocument);
-router.get('/:userId',    authorize('MASTER','DISTRIBUTEUR_INTERNE','CONSEILLER','CLIENTS_VOIR'), getDocuments);
+router.post('/:userId',   authorize('MASTER','DISTRIBUTEUR_INTERNE','CONSEILLER','CLIENT','CLIENTS_AJOUTER','CLIENTS_MODIFIER'), upload.single('file'), uploadDocument);
+router.get('/:userId',    authorize('MASTER','DISTRIBUTEUR_INTERNE','CONSEILLER','CLIENT','CLIENTS_VOIR'), getDocuments);
 router.delete('/:id',     authorize('MASTER','ADMINS_SUPPRIMER','CLIENTS_SUPPRIMER'), deleteDocument);
 
 export default router;

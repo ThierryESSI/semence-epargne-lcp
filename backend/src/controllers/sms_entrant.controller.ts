@@ -16,7 +16,9 @@ import { sendSms } from '../utils/sms';
 import { sendWhatsApp } from '../utils/notifications';
 import { enregistrerVersement } from '../services/epargne.service';
 
-const WEBHOOK_SECRET = process.env.SMS_WEBHOOK_SECRET || 'lcp_sms_secret_2026';
+// [SÉCURITÉ] Fail-closed : pas de secret par défaut. Si SMS_WEBHOOK_SECRET
+// n'est pas défini, le webhook refuse les requêtes (évite un secret connu).
+const WEBHOOK_SECRET = process.env.SMS_WEBHOOK_SECRET;
 function fmt(n: number) { return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' F'; }
 
 // Garde anti-force-brute : max 5 codes erronés par carte sur une fenêtre de 15 min
@@ -265,7 +267,7 @@ export async function whatsappVerify(req: Request, res: Response) {
   const mode      = req.query['hub.mode'];
   const token     = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-  const expected  = process.env.WHATSAPP_VERIFY_TOKEN || 'SemenceEpWhatsApp2026';
+  const expected  = process.env.WHATSAPP_VERIFY_TOKEN;
 
   if (mode === 'subscribe' && token === expected) {
     console.log('[WhatsApp] Webhook verifie avec succes');

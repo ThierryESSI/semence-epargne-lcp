@@ -92,9 +92,8 @@ export async function ensureUnarciInfra() {
       where:{ userId:user.id }, update:{},
       create:{ numeroCompte:'UNARCI-0001', rib:'RI-UNARCI-0001', type:TypeCompte.ORDINAIRE, statut:StatutCompte.ACTIF, userId:user.id },
     });
-    const seq = (await prisma.distributeur.count()) + 1;
     dist = await prisma.distributeur.create({
-      data: { code: generateCodeActeur('DA', seq), type: TypeDistributeur.AGREE, nomEntreprise: UNARCI_CONST.NOM_ENTREPRISE, ville: UNARCI_CONST.VILLE, pays:'CI', userId:user.id },
+      data: { code: generateCodeActeur('DA'), type: TypeDistributeur.AGREE, nomEntreprise: UNARCI_CONST.NOM_ENTREPRISE, ville: UNARCI_CONST.VILLE, pays:'CI', userId:user.id },
     });
     await prisma.siteConfig.upsert({ where:{ cle:'UNARCI_DIST_ID' }, update:{ valeur:dist.id }, create:{ cle:'UNARCI_DIST_ID', valeur:dist.id, label:'Id distributeur UNARCI' } });
     await prisma.siteConfig.upsert({ where:{ cle:'UNARCI_DIST_LOGIN' }, update:{ valeur:user.email }, create:{ cle:'UNARCI_DIST_LOGIN', valeur:user.email, label:'Login agence UNARCI' } });

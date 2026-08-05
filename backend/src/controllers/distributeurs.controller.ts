@@ -23,16 +23,23 @@ export async function creerDistributeur(req: Request, res: Response) {
 
     const role: Role = type === 'INTERNE' ? Role.DISTRIBUTEUR_INTERNE : Role.DISTRIBUTEUR_AGREE;
 
-    // Un distributeur (non MASTER) ne crée que ses propres agences
-    let parentId = parentDistributeurId || null;
-    if (!parentId && (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE')) {
+    // Un distributeur (non MASTER) ne crée que ses propres agences.
+    // [SÉCURITÉ] On ignore totalement le parentDistributeurId fourni par le
+    // corps de requête pour un distributeur : il ne peut créer que des filiales.
+    let parentId = null;
+    if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
       const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
       parentId = d?.id || null;
+    } else if (parentDistributeurId) {
+      parentId = parentDistributeurId;
     }
 
-    const count = await prisma.distributeur.count();
-    const seq   = count + 1;
-    const code  = generateCodeActeur(type === 'INTERNE' ? 'DI' : 'DA', seq);
+    const code  = generateCodeActeur(type === 'INTERNE' ? 'DI' : 'DA');
+
+    // [SÉCURITÉ] Caution strictement numérique
+    const cautionNum = caution === undefined || caution === null || caution === '' ? null : Number(caution);
+    if (cautionNum !== null && !Number.isFinite(cautionNum))
+      return res.status(400).json({ error: 'Caution invalide (montant numérique requis)' });
 
     // ── Réutilisation d'un compte existant (1 personne = 1 compte) ──
     const existingUser = telephone
@@ -53,7 +60,7 @@ export async function creerDistributeur(req: Request, res: Response) {
         data: { role: upgradeRole(user.role, role) as Role, permissions: mergePermissions(user.permissions as string[], PERMISSIONS_DISTRIBUTEUR) as any }
       });
       await prisma.distributeur.create({
-        data: { code, type: type as TypeDistributeur, nomEntreprise: nomEntreprise.trim(), pays: pays || 'CI', ville: ville.trim(), caution: caution ? parseFloat(caution) : null, parentDistributeurId: parentId, userId: user.id }
+        data: { code, type: type as TypeDistributeur, nomEntreprise: nomEntreprise.trim(), pays: pays || 'CI', ville: ville.trim(), caution: cautionNum, parentDistributeurId: parentId, userId: user.id }
       });
       const hasCompte = await prisma.compte.findFirst({ where: { userId: user.id } });
       if (!hasCompte)
@@ -87,7 +94,7 @@ export async function creerDistributeur(req: Request, res: Response) {
       data: {
         code, type: type as TypeDistributeur, nomEntreprise: nomEntreprise.trim(),
         pays: pays || 'CI', ville: ville.trim(),
-        caution: caution ? parseFloat(caution) : null,
+        caution: cautionNum,
         parentDistributeurId: parentId, userId: newUser.id,
       }
     });
@@ -117,6 +124,10 @@ export async function listerDistributeurs(req: Request, res: Response) {
   if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
     const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
     where.parentDistributeurId = d?.id || '__AUCUN__';
+  } else if (req.user!.role === 'CONSEILLER') {
+    // [VUE CONSEILLER] Un conseiller ne voit que son propre distributeur.
+    const c = await prisma.conseiller.findFirst({ where: { userId: req.user!.userId } });
+    where.id = c?.distributeurId || '__AUCUN__';
   }
   if (search) {
     where.OR = [
@@ -149,5 +160,16 @@ export async function getDistributeur(req: Request, res: Response) {
     }
   });
   if (!d) return res.status(404).json({ error: 'Distributeur introuvable' });
+  // [SÉCURITÉ] Un distributeur ne consulte que lui-même ou ses filiales directes ;
+  // un conseiller ne consulte que son propre distributeur.
+  if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
+    const acteur = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId }, select: { id: true } });
+    if (d.id !== acteur?.id && d.parentDistributeurId !== acteur?.id)
+      return res.status(403).json({ error: 'Accès refusé : ce distributeur ne fait pas partie de votre réseau' });
+  } else if (req.user!.role === 'CONSEILLER') {
+    const c = await prisma.conseiller.findFirst({ where: { userId: req.user!.userId }, select: { distributeurId: true } });
+    if (d.id !== c?.distributeurId)
+      return res.status(403).json({ error: 'Accès refusé : ce distributeur ne fait pas partie de votre réseau' });
+  }
   return res.json({ data: d });
 }

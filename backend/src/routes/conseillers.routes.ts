@@ -12,7 +12,7 @@ import { creerConseiller, listerConseillers, getConseiller } from '../controller
 
 const router = Router();
 router.use(authenticate);
-router.post('/', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE'), creerConseiller);
-router.get('/',  authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE'), listerConseillers);
-router.get('/:id', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER'), getConseiller);
+router.post('/', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLERS_AJOUTER'), creerConseiller);
+router.get('/',  authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER','CONSEILLERS_VOIR'), listerConseillers);
+router.get('/:id', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER','CONSEILLERS_DETAILS'), getConseiller);
 export default router;

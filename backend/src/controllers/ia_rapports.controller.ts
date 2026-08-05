@@ -4,7 +4,12 @@ import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// [CORRECTION] Client instancié paresseusement : si ANTHROPIC_API_KEY est
+// absente au démarrage (dev/test), le serveur ne crashe pas à l'import.
+function clientIA(): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY manquante');
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
 
 function fmt(n: number) {
   return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' FCFA';
@@ -112,7 +117,7 @@ Fournis une analyse structuree en francais avec :
 4. **Recommandations concretes** pour le mois prochain (3 actions)
 5. **Indicateur de sante global** : Excellent / Bon / Correct / A surveiller (avec justification)`;
 
-    const message = await client.messages.create({
+    const message = await clientIA().messages.create({
       model: 'claude-haiku-4-5', max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }]
     });
@@ -149,7 +154,7 @@ export async function questionIA(req: Request, res: Response) {
       return res.status(500).json({ error: 'Cle API Anthropic non configuree (ANTHROPIC_API_KEY)' });
     }
     const donnees = await collecterDonnees(periode);
-    const message = await client.messages.create({
+    const message = await clientIA().messages.create({
       model: 'claude-haiku-4-5', max_tokens: 800,
       messages: [{
         role: 'user',

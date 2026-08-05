@@ -8,6 +8,7 @@
 // backend/src/controllers/clients.controller.ts
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
+import { clientAppartientA } from '../utils/acces';
 
 export async function listerClients(req: Request, res: Response) {
   const page   = parseInt(req.query.page as string || '1');
@@ -59,5 +60,9 @@ export async function getClient(req: Request, res: Response) {
     }
   });
   if (!client) return res.status(404).json({ error: 'Client introuvable' });
+  // [SÉCURITÉ] Un conseiller/distributeur ne consulte que les clients de son réseau
+  if (!['MASTER','SUPER_ADMIN'].includes(req.user!.role) &&
+      !(await clientAppartientA(client.userId, req.user!.role, req.user!.userId)))
+    return res.status(403).json({ error: 'Accès refusé : ce client ne fait pas partie de votre réseau' });
   return res.json({ data: client });
 }

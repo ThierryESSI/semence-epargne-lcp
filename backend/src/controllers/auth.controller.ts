@@ -10,11 +10,21 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
 import { signAccessToken, signRefreshToken, verifyToken } from '../utils/jwt';
+import { codeAutorise, codeEchec, codeSucces } from '../utils/rateLimits';
+
+// [SÉCURITÉ] Garde anti-brute-force : max 5 échecs / 15 min par IP sur login/refresh
+function verifier(cle: string): boolean { return codeAutorise(cle); }
+function echec(cle: string) { codeEchec(cle); }
+function succes(cle: string) { codeSucces(cle); }
 
 export async function login(req: Request, res: Response) {
   const email    = req.body.email || req.body.identifiant;
   const password = req.body.password;
   if (!email || !password) return res.status(400).json({ error: 'Identifiant et mot de passe requis' });
+
+  const cle = `login:${req.ip}`;
+  if (!verifier(cle))
+    return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
 
   // [FIX 1] Recherche par email OU téléphone
   const user = await prisma.user.findFirst({
@@ -22,10 +32,13 @@ export async function login(req: Request, res: Response) {
     select: { id:true, email:true, nom:true, prenom:true, role:true, actif:true, passwordHash:true, telephone:true }
   });
 
-  if (!user || !(await bcrypt.compare(password, user.passwordHash)))
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    echec(cle);
     return res.status(401).json({ error: 'Identifiants incorrects' });
+  }
   if (!user.actif)
     return res.status(403).json({ error: 'Compte inactif. Contactez votre conseiller.' });
+  succes(cle);
 
   const payload      = { userId:user.id, email:user.email, role:user.role, telephone:user.telephone };
   const accessToken  = signAccessToken(payload);
@@ -46,14 +59,23 @@ export async function login(req: Request, res: Response) {
 export async function refreshToken(req: Request, res: Response) {
   const { refreshToken: token } = req.body;
   if (!token) return res.status(400).json({ error: 'Refresh token requis' });
+  const cle = `refresh:${req.ip}`;
+  if (!verifier(cle))
+    return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
   const payload = verifyToken(token);
-  if (!payload) return res.status(401).json({ error: 'Refresh token invalide ou expiré' });
+  if (!payload) {
+    echec(cle);
+    return res.status(401).json({ error: 'Refresh token invalide ou expiré' });
+  }
   const user = await prisma.user.findUnique({
     where:{ id:payload.userId },
     select:{ id:true, email:true, role:true, telephone:true, refreshToken:true, actif:true }
   });
-  if (!user || user.refreshToken !== token || !user.actif)
+  if (!user || user.refreshToken !== token || !user.actif) {
+    echec(cle);
     return res.status(401).json({ error: 'Session invalide' });
+  }
+  succes(cle);
   const newAccess  = signAccessToken({ userId:user.id, email:user.email, role:user.role, telephone:user.telephone });
   const newRefresh = signRefreshToken({ userId:user.id });
   await prisma.user.update({ where:{ id:user.id }, data:{ refreshToken:newRefresh } });

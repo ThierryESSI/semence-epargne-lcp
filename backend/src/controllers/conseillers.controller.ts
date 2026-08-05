@@ -23,19 +23,26 @@ export async function creerConseiller(req: Request, res: Response) {
     if (!nom)       manquants.push('nom');
     if (manquants.length > 0) return res.status(400).json({ error: `Champs manquants : ${manquants.join(', ')}` });
 
-    // Résoudre distributeurId
-    let distributeurId = distIdBody;
-    if (!distributeurId && (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE')) {
+    // Résoudre distributeurId.
+    // [SÉCURITÉ] Un distributeur ne crée que ses propres conseillers :
+    // on ignore totalement le distributeurId fourni dans le corps de requête.
+    let distributeurId: string | undefined;
+    if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
       const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
       distributeurId = d?.id;
+    } else {
+      distributeurId = distIdBody;
     }
     if (!distributeurId) {
       return res.status(400).json({ error: 'distributeurId requis. Sélectionnez un distributeur.' });
     }
 
-    const count = await prisma.conseiller.count();
-    const seq   = count + 1;
-    const code  = generateCodeActeur('CC', seq);
+    // [SÉCURITÉ] Caution strictement numérique
+    const cautionNum = caution === undefined || caution === null || caution === '' ? null : Number(caution);
+    if (cautionNum !== null && !Number.isFinite(cautionNum))
+      return res.status(400).json({ error: 'Caution invalide (montant numérique requis)' });
+
+    const code  = generateCodeActeur('CC');
 
     // ── Réutilisation d'un compte existant (1 personne = 1 compte) ──
     const existingUser = await prisma.user.findUnique({ where: { telephone } });
@@ -52,7 +59,7 @@ export async function creerConseiller(req: Request, res: Response) {
         data: { role: upgradeRole(user.role, Role.CONSEILLER) as Role, permissions: mergePermissions(user.permissions as string[], PERMISSIONS_CONSEILLER) as any }
       });
       await prisma.conseiller.create({
-        data: { code, type: type as any, region, departement, commune, codeStand, distributeurId, caution: caution ? parseFloat(caution) : null, userId: user.id }
+        data: { code, type: type as any, region, departement, commune, codeStand, distributeurId, caution: cautionNum, userId: user.id }
       });
       const hasCompte = await prisma.compte.findFirst({ where: { userId: user.id } });
       if (!hasCompte)
@@ -83,7 +90,7 @@ export async function creerConseiller(req: Request, res: Response) {
 
     await prisma.compte.create({ data: { numeroCompte: `${code}-CPT`, rib: `RI-${code}-CPT`, type: 'ORDINAIRE', statut: 'ACTIF', userId: newUser.id } });
     await prisma.conseiller.create({
-      data: { code, type: type as any, region, departement, commune, codeStand, distributeurId, caution: caution ? parseFloat(caution) : null, userId: newUser.id }
+      data: { code, type: type as any, region, departement, commune, codeStand, distributeurId, caution: cautionNum, userId: newUser.id }
     });
 
     await prisma.auditLog.create({
@@ -110,6 +117,10 @@ export async function listerConseillers(req: Request, res: Response) {
   if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
     const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
     if (d) where.distributeurId = d.id;
+  } else if (req.user!.role === 'CONSEILLER') {
+    // [VUE CONSEILLER] Un conseiller ne voit que sa propre fiche.
+    const c = await prisma.conseiller.findFirst({ where: { userId: req.user!.userId } });
+    if (c) where.id = c.id;
   }
 
   const [total, conseillers] = await Promise.all([
@@ -136,5 +147,16 @@ export async function getConseiller(req: Request, res: Response) {
     }
   });
   if (!c) return res.status(404).json({ error: 'Conseiller introuvable' });
+  // [SÉCURITÉ] Un distributeur ne consulte que ses propres conseillers ;
+  // un conseiller ne consulte que lui-même.
+  if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
+    const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId }, select: { id: true } });
+    if (c.distributeurId !== d?.id)
+      return res.status(403).json({ error: 'Accès refusé : ce conseiller ne fait pas partie de votre réseau' });
+  } else if (req.user!.role === 'CONSEILLER') {
+    const self = await prisma.conseiller.findFirst({ where: { userId: req.user!.userId }, select: { id: true } });
+    if (c.id !== self?.id)
+      return res.status(403).json({ error: 'Accès refusé' });
+  }
   return res.json({ data: c });
 }

@@ -14,6 +14,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
 import { verifyQrToken, verifyHashedCode, generateCodeActeur, generateRef } from '../utils/crypto';
 import { sendSms, tpl } from '../utils/sms';
+import { carteAppartientA, clientAppartientA, conseillerAutorise } from '../utils/acces';
 
 interface OfflineOp {
   id:        string;   // UUID généré côté client
@@ -58,17 +59,17 @@ export async function syncOfflineQueue(req: Request, res: Response) {
 
         // ─── Dépôt carte Semence Épargne ───────────────────────────────────
         case 'DEPOT_CARTE':
-          result = await syncDepotCarte(op, req.user!.userId);
+          result = await syncDepotCarte(op, req.user!.userId, req.user!.role);
           break;
 
         // ─── Ouverture compte client ────────────────────────────────────────
         case 'OUVERTURE_COMPTE':
-          result = await syncOuvertureCompte(op, req.user!.userId);
+          result = await syncOuvertureCompte(op, req.user!.userId, req.user!.role);
           break;
 
         // ─── Activation compte ──────────────────────────────────────────────
         case 'ACTIVATION_COMPTE':
-          result = await syncActivationCompte(op, req.user!.userId);
+          result = await syncActivationCompte(op, req.user!.userId, req.user!.role);
           break;
 
         default:
@@ -108,7 +109,7 @@ export async function syncOfflineQueue(req: Request, res: Response) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Sync : Dépôt carte
 // ─────────────────────────────────────────────────────────────────────────────
-async function syncDepotCarte(op: OfflineOp, actorId: string): Promise<SyncResult> {
+async function syncDepotCarte(op: OfflineOp, actorId: string, actorRole: string): Promise<SyncResult> {
   const { qrEpargneToken, codeValidation } = op.payload;
 
   // Vérifier que cette opération offline n'a pas déjà été traitée (idempotence)
@@ -128,6 +129,10 @@ async function syncDepotCarte(op: OfflineOp, actorId: string): Promise<SyncResul
   if (!carte) return { id: op.id, type: op.type, success: false, message: '', error: 'Carte introuvable' };
   if (carte.statut !== 'DISPONIBLE' && carte.statut !== 'VENDUE') {
     return { id: op.id, type: op.type, success: false, message: '', error: `Carte ${carte.statut} — déjà utilisée ou annulée` };
+  }
+  // [SÉCURITÉ] La carte doit appartenir au réseau de l'acteur (conseiller/distributeur)
+  if (!(await carteAppartientA(carte.id, actorRole, actorId))) {
+    return { id: op.id, type: op.type, success: false, message: '', error: 'Cette carte ne fait pas partie de votre réseau' };
   }
   if (!verifyHashedCode(codeValidation, carte.codeValidation)) {
     return { id: op.id, type: op.type, success: false, message: '', error: 'Code de validation incorrect' };
@@ -188,8 +193,24 @@ async function syncDepotCarte(op: OfflineOp, actorId: string): Promise<SyncResul
 // ─────────────────────────────────────────────────────────────────────────────
 // Sync : Ouverture de compte
 // ─────────────────────────────────────────────────────────────────────────────
-async function syncOuvertureCompte(op: OfflineOp, actorId: string): Promise<SyncResult> {
+async function syncOuvertureCompte(op: OfflineOp, actorId: string, actorRole: string): Promise<SyncResult> {
   const { nom, prenom, email, telephone, password, region, ville, commune, typeCompte = 'ORDINAIRE', conseillerId } = op.payload;
+
+  if (!nom || !prenom || !telephone || !password)
+    return { id: op.id, type: op.type, success: false, message: '', error: 'Champs requis manquants (nom, prenom, telephone, password)' };
+  if (String(password).length < 8)
+    return { id: op.id, type: op.type, success: false, message: '', error: 'Mot de passe trop court (min 8 caractères)' };
+
+  // [SÉCURITÉ] Le conseiller cible doit appartenir au réseau de l'acteur
+  if (conseillerId && !(await conseillerAutorise(conseillerId, actorRole, actorId)))
+    return { id: op.id, type: op.type, success: false, message: '', error: 'Ce conseiller ne fait pas partie de votre réseau' };
+  let conseillerFinal = conseillerId;
+  if (!conseillerFinal) {
+    const premier = await prisma.conseiller.findFirst({ orderBy: { createdAt: 'asc' } });
+    conseillerFinal = premier?.id;
+  }
+  if (!conseillerFinal)
+    return { id: op.id, type: op.type, success: false, message: '', error: 'Aucun conseiller disponible' };
 
   // Idempotence : vérifier si le compte existe déjà (email ou téléphone)
   const existing = await prisma.user.findFirst({ where: { OR: [{ email }, { telephone }] } });
@@ -198,16 +219,15 @@ async function syncOuvertureCompte(op: OfflineOp, actorId: string): Promise<Sync
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const countClients = await prisma.client.count();
 
   const user = await prisma.user.create({
     data: { email, telephone, passwordHash, nom: nom.toUpperCase(), prenom, role: 'CLIENT', actif: false }
   });
 
-  const codeClient   = generateCodeActeur('CLI', countClients + 1);
+  const codeClient   = generateCodeActeur('CLI');
   const numeroCompte = `SE-${user.id.slice(-8).toUpperCase()}`;
 
-  await prisma.client.create({ data: { code: codeClient, region, ville, commune, conseillerId, userId: user.id } });
+  await prisma.client.create({ data: { code: codeClient, region, ville, commune, conseillerId: conseillerFinal, userId: user.id } });
   await prisma.compte.create({ data: { numeroCompte, rib: `RI-${numeroCompte}`, type: typeCompte as any, userId: user.id } });
 
   await prisma.auditLog.create({
@@ -224,11 +244,18 @@ async function syncOuvertureCompte(op: OfflineOp, actorId: string): Promise<Sync
 // ─────────────────────────────────────────────────────────────────────────────
 // Sync : Activation de compte
 // ─────────────────────────────────────────────────────────────────────────────
-async function syncActivationCompte(op: OfflineOp, actorId: string): Promise<SyncResult> {
+async function syncActivationCompte(op: OfflineOp, actorId: string, actorRole: string): Promise<SyncResult> {
   const { userId } = op.payload;
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { id: op.id, type: op.type, success: false, message: '', error: 'Utilisateur introuvable' };
+  // [SÉCURITÉ] Seuls des comptes CLIENT peuvent être activés via la synchronisation
+  // (interdit d'activer un MASTER/SUPER_ADMIN par ce canal).
+  if (user.role !== 'CLIENT')
+    return { id: op.id, type: op.type, success: false, message: '', error: 'Seuls les comptes clients peuvent être activés' };
+  // [SÉCURITÉ] Le client doit appartenir au réseau de l'acteur (sauf MASTER/SUPER_ADMIN)
+  if (actorRole !== 'MASTER' && actorRole !== 'SUPER_ADMIN' && !(await clientAppartientA(userId, actorRole, actorId)))
+    return { id: op.id, type: op.type, success: false, message: '', error: 'Ce client ne fait pas partie de votre réseau' };
   if (user.actif) return { id: op.id, type: op.type, success: true, message: 'Compte déjà actif (doublon ignoré)' };
 
   await prisma.$transaction([

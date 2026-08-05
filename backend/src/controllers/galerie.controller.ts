@@ -25,16 +25,25 @@ export async function ajouterPhoto(req: Request, res: Response) {
     const { url, publicId } = await uploadToCloudinary(req.file.buffer, {
       folder: 'galerie', resourceType: 'image'
     });
-    const existing = await prisma.siteConfig.count({
-      where: { cle: { startsWith: 'GALERIE_PHOTO_' } }
+    // [CORRECTION] Numérotation par max existant (et non count) pour éviter
+    // les collisions de clé quand des photos ont été supprimées.
+    const existing = await prisma.siteConfig.findMany({
+      where: { cle: { startsWith: 'GALERIE_PHOTO_' } },
+      select: { cle: true }
     });
-    const cle = `GALERIE_PHOTO_${String(existing + 1).padStart(3, '0')}`;
+    let maxOrdre = 0;
+    for (const c of existing) {
+      const n = parseInt(c.cle.replace('GALERIE_PHOTO_', ''), 10);
+      if (!Number.isNaN(n) && n > maxOrdre) maxOrdre = n;
+    }
+    const ordre = maxOrdre + 1;
+    const cle = `GALERIE_PHOTO_${String(ordre).padStart(3, '0')}`;
     await prisma.siteConfig.create({
       data: {
         cle,
-        valeur: JSON.stringify({ url, publicId, titre: titre || '', descriptif: descriptif || '', ordre: existing + 1 }),
+        valeur: JSON.stringify({ url, publicId, titre: titre || '', descriptif: descriptif || '', ordre }),
         type: 'IMAGE',
-        label: `Photo galerie ${existing + 1}`,
+        label: `Photo galerie ${ordre}`,
         updatedBy: req.user!.userId
       }
     });

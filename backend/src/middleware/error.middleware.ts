@@ -11,6 +11,9 @@ import { Request, Response, NextFunction } from 'express';
 export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
   console.error('[ERROR]', err);
   const status = err.status || err.statusCode || 500;
-  const message = err.message || 'Erreur serveur interne';
-  res.status(status).json({ error: message, ...(process.env.NODE_ENV === 'development' && { stack: err.stack }) });
+  // [SÉCURITÉ] Ne jamais exposer la stack ni les messages internes en production.
+  // Les messages internes peuvent fuiter des chemins, requêtes SQL ou secrets.
+  const expose = process.env.NODE_ENV !== 'production';
+  const message = expose ? (err.message || 'Erreur serveur interne') : 'Erreur serveur interne';
+  res.status(status).json({ error: message, ...(expose && { stack: err.stack }) });
 }

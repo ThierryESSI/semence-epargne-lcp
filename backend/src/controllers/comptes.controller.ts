@@ -1,10 +1,12 @@
 // backend/src/controllers/comptes.controller.ts
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
 import { generateCodeActeur } from '../utils/crypto';
 import { sendSms, tpl } from '../utils/sms';
 import { notifier, emailTpl } from '../utils/notifications';
+import { clientAppartientA, ROLES_STAFF } from '../utils/acces';
 import { Role } from '@prisma/client';
 
 function generateRIB(userId: string): string {
@@ -80,7 +82,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
         await prisma.compte.create({ data:{ numeroCompte, rib, type:typeCompte as any, statut:'ACTIF', userId:user.id } });
       }
 
-      const codeClient = generateCodeActeur('CLI', await prisma.client.count() + 1);
+      const codeClient = generateCodeActeur('CLI');
       const villeFinal = ville || departement || region;
       await prisma.client.create({ data:{ code:codeClient, region, ville:villeFinal, commune, conseillerId, userId:user.id } });
 
@@ -108,9 +110,8 @@ export async function ouvrirCompte(req: Request, res: Response) {
 
     // ── Nouveau compte ──────────────────────────────────────────────
     const emailFinal     = email || `${telephone.replace(/\D/g,'')}@semence-noemail.ci`;
-    const tempPassword   = `LCP${Math.floor(1000 + Math.random() * 9000)}`;
+    const tempPassword   = `LCP${crypto.randomInt(100000, 1000000)}`;
     const passwordHash   = await bcrypt.hash(tempPassword, 12);
-    const countClients   = await prisma.client.count();
 
     const newUser = await prisma.user.create({
       data: {
@@ -127,7 +128,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
       }
     });
 
-    const codeClient   = generateCodeActeur('CLI', countClients + 1);
+    const codeClient   = generateCodeActeur('CLI');
     const numeroCompte = `SE-${newUser.id.slice(-8).toUpperCase()}`;
     const rib          = generateRIB(newUser.id);
     const villeFinal   = ville || departement || region;
@@ -158,7 +159,8 @@ export async function ouvrirCompte(req: Request, res: Response) {
     });
   } catch (err: any) {
     if (err.code === 'P2002') { const field = err.meta?.target?.[0]||'champ'; return res.status(409).json({ error:`Ce ${field} est déjà utilisé` }); }
-    return res.status(500).json({ error:`Erreur serveur : ${err.message}` });
+    console.error('[ouvrirCompte]', err);
+    return res.status(500).json({ error:'Erreur serveur interne' });
   }
 }
 
@@ -166,11 +168,15 @@ export async function activerCompte(req: Request, res: Response) {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ error:'userId requis' });
 
-  // [SÉCURITÉ] Un client ne peut activer que SON compte ; les rôles staff activent qui ils veulent
+  // [SÉCURITÉ] Un client ne peut activer que SON compte ; les rôles staff activent
+  // uniquement les clients de leur réseau (conseiller/distributeur).
   const role = req.user!.role;
   if (role === 'CLIENT') {
     if (userId !== req.user!.userId) return res.status(403).json({ error:'Accès refusé' });
-  } else if (!['MASTER','SUPER_ADMIN','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER'].includes(role)) {
+  } else if (ROLES_STAFF.includes(role as any)) {
+    if (role !== 'MASTER' && role !== 'SUPER_ADMIN' && !(await clientAppartientA(userId, role, req.user!.userId)))
+      return res.status(403).json({ error:'Accès refusé : ce client ne dépend pas de votre réseau' });
+  } else {
     return res.status(403).json({ error:'Accès refusé' });
   }
 
@@ -200,5 +206,11 @@ export async function getCompteById(req: Request, res: Response) {
     include: { user:{ select:{ nom:true, prenom:true, email:true, telephone:true, whatsapp:true, role:true } }, transactions:{ orderBy:{ createdAt:'desc' }, take:10 } }
   });
   if (!compte) return res.status(404).json({ error:'Compte introuvable' });
+
+  // [SÉCURITÉ] Scoping : un distributeur ne voit que les comptes de ses clients.
+  if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
+    if (!(await clientAppartientA(compte.userId, req.user!.role, req.user!.userId)))
+      return res.status(403).json({ error:'Accès refusé : ce compte ne dépend pas de votre réseau' });
+  }
   return res.json({ data:compte });
 }

@@ -49,7 +49,7 @@ export function verifyQrToken(token: string): { valid: boolean; payload?: any } 
 
 // ─── Code de validation carte ────────────────────────────────────────────────
 export function generateCode4(): string {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+  return crypto.randomInt(1000, 10000).toString();
 }
 
 export function hashCode(code: string): string {
@@ -89,6 +89,15 @@ export function generateLotRef(): string {
   return `LOT-${out}`;
 }
 
-export function generateCodeActeur(prefix: string, seq: number): string {
-  return `${prefix}-${seq.toString().padStart(6, '0')}`;
+// ─── Code d'acteur (client, conseiller, distributeur) ────────────────
+// [CODIFICATION] Ancien format séquentiel « CLI-000001 » : révélait le rang
+// (qui est le premier, combien d'inscrits) et était énumérable.
+// Nouveau format « CLI-A3F9K2 » : 6 caractères alphanumériques tirés par
+// crypto (alphabet sans O/0/I/1). Un code unique, stable et traçable,
+// mais qui ne révèle ni l'ordre d'inscription ni le rang de l'acteur.
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export function generateCodeActeur(prefix: string, length = 6): string {
+  let out = '';
+  for (let i = 0; i < length; i++) out += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
+  return `${prefix}-${out}`;
 }

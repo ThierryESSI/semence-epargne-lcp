@@ -17,11 +17,13 @@ router.patch('/admins/:userId/toggle',      authorize('SUPER_ADMIN','ADMINS_MODI
 router.post('/admins/:userId/reset-pwd',    authorize('SUPER_ADMIN','ADMINS_MODIFIER'),  resetPasswordAdmin);
 router.delete('/admins/:userId',            authorize('SUPER_ADMIN','ADMINS_SUPPRIMER'), supprimerAdmin);
 
-// Suppressions expert (SuperAdmin / Master) — cascade complète
+// Suppressions expert — cascade complète
+// [SÉCURITÉ] supprimerUserExpert (toute suppression de compte, y compris MASTER)
+// est réservé au SUPER_ADMIN seul. MASTER ne supprime que clients/conseillers/distributeurs.
 router.delete('/clients',            authorize('SUPER_ADMIN','MASTER'), viderClients);
 router.delete('/clients/:id',        authorize('SUPER_ADMIN','MASTER'), supprimerClient);
 router.delete('/conseillers/:id',    authorize('SUPER_ADMIN','MASTER'), supprimerConseiller);
 router.delete('/distributeurs/:id',  authorize('SUPER_ADMIN','MASTER'), supprimerDistributeur);
-router.delete('/users/:userId',      authorize('SUPER_ADMIN','MASTER'), supprimerUserExpert);
+router.delete('/users/:userId',      authorize('SUPER_ADMIN'), supprimerUserExpert);
 
 export default router;
