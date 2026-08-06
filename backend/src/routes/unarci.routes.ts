@@ -2,7 +2,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticate, authorize } from '../middleware/auth.middleware';
-import { adherer, configUnarci, listerAdherents, getAdherent, activerAdherent, statsAdherents, rechercherAdherent, rejeterAdherent, supprimerAdherent } from '../controllers/unarci.controller';
+import { adherer, configUnarci, listerAdherents, getAdherent, activerAdherent, statsAdherents, rechercherAdherent, rejeterAdherent, supprimerAdherent, validerPieces, pdfAdherent } from '../controllers/unarci.controller';
 import { upload } from '../utils/upload';
 
 const router = Router();
@@ -46,6 +46,8 @@ router.post('/adhesion', adhesionLimiter, multerAvecMessage, adherer);
 router.use('/agence', authenticate);
 router.get('/agence/adherents', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), listerAdherents);
 router.get('/agence/adherents/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), getAdherent);
+router.get('/agence/adherents/:id/pdf', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), pdfAdherent);
+router.post('/agence/pieces/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), validerPieces);
 router.delete('/agence/adherents/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), supprimerAdherent);
 router.get('/agence/recherche',   authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), rechercherAdherent);
 router.get('/agence/stats',       authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), statsAdherents);

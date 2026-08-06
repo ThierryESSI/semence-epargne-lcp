@@ -9,6 +9,7 @@
 //  - Le conseiller valide le paiement manuellement (statut → ACTIF)
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import PDFDocument from 'pdfkit';
 import prisma from '../utils/prisma';
 import { generateRef, generateCodeActeur } from '../utils/crypto';
 import { sendSms, tpl } from '../utils/sms';
@@ -312,6 +313,11 @@ function adherentFiche(a: any) {
     telephone: user.telephone || null,
     email: user.email || null,
     pieces: { photo:a.photoUrl||null, pieceRecto:a.pieceRectoUrl||null, pieceVerso:a.pieceVersoUrl||null },
+    piecesStatut: a.piecesStatut || 'EN_ATTENTE',
+    piecesMotif: a.piecesMotif || null,
+    piecesVerifieesAt: a.piecesVerifieesAt || null,
+    relanceCount: a.relanceCount || 0,
+    relanceAt: a.relanceAt || null,
     region: a.region, ville: a.ville, village: a.village, campement: a.campement,
     situation: a.situation,
     numeroCni: a.numeroCni, numeroPasseport: a.numeroPasseport, numeroPermis: a.numeroPermis,
@@ -445,8 +451,198 @@ export async function statsAdherents(req: Request, res: Response) {
   } catch (err:any) { return res.status(500).json({ error:err.message }); }
 }
 
-// ─── AGENCE : recherche par id / référence / téléphone / email / nom /
-// code client / numéro de compte / RIB / CNI ───────────────────────────
+// ─── AGENCE : vérification des pièces jointes (conformes / à revoir) ──
+export async function validerPieces(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const conformes = req.body.conformes === true || req.body.conformes === 'true';
+    const motif = String(req.body.motif || '').trim().slice(0, 300) || null;
+
+    const adhesion = await prisma.adherentUnarci.findUnique({ where:{ id } });
+    if (!adhesion) return res.status(404).json({ error:'Adhésion introuvable' });
+
+    if (req.user!.role === 'DISTRIBUTEUR_AGREE' || req.user!.role === 'DISTRIBUTEUR_INTERNE') {
+      const d = await prisma.distributeur.findFirst({ where:{ userId:req.user!.userId } });
+      if (d?.id !== adhesion.distributeurId)
+        return res.status(403).json({ error:'Cette adhésion ne dépend pas de votre agence' });
+    }
+    if (!conformes && !motif)
+      return res.status(400).json({ error:'Un motif est requis pour demander des pièces à revoir' });
+
+    const statut = conformes ? 'CONFORMES' : 'A_REVOIR';
+    await prisma.adherentUnarci.update({
+      where:{ id },
+      data:{ piecesStatut: statut, piecesMotif: conformes ? null : motif, piecesVerifieesAt: new Date() },
+    });
+
+    await prisma.auditLog.create({
+      data:{ action:'VERIFICATION_PIECES_UNARCI', entite:'AdherentUnarci', entiteId:id, actorId:req.user!.userId, details:{ reference:adhesion.reference, statut, motif } },
+    }).catch(() => {});
+
+    return res.json({ success:true, data:{ id, piecesStatut: statut, piecesMotif: conformes ? null : motif } });
+  } catch (err:any) { return res.status(500).json({ error:err.message }); }
+}
+
+// ─── AGENCE : export PDF de la fiche adhérent ─────────────────────────
+function construireFichePdf(f: any): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size:'A4', margin:48, info:{ Title:`Fiche adhérent ${f.reference}`, Author:'Semence Epargne — LCP' } });
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const PRIMARY = '#F65A04', DARK = '#0F2E52', MUTED = '#6B7C9A', GREY = '#8a94a6';
+
+    const entete = () => {
+      doc.fontSize(18).fillColor(PRIMARY).text('SEMENCE ÉPARGNE', { continued:true }).fillColor(DARK).text('  ·  Le Crédit Panafricain');
+      doc.moveDown(0.3);
+      doc.fontSize(10).fillColor(MUTED).text('UNARCI — Union Nationale des Artistes de Côte d\'Ivoire');
+      doc.fontSize(12).fillColor(DARK).text('FICHE ADHÉRENT', { underline:true });
+      doc.moveDown(0.4);
+    };
+    const section = (t: string) => {
+      doc.moveDown(0.5);
+      doc.fontSize(11).fillColor(PRIMARY).text(t.toUpperCase());
+      doc.moveDown(0.2);
+    };
+    const ligne = (label: string, value: any) => {
+      const v = value === null || value === undefined || value === '' ? '—' : String(value);
+      const y = doc.y;
+      doc.fontSize(9).fillColor(GREY).text(label + ' :  ', 48, y, { width: 160, continued:true });
+      doc.fillColor(DARK).text(v, 48 + 160, y, { width: doc.page.width - 48 - 160 - 40 });
+      doc.moveDown(0.25);
+    };
+
+    entete();
+
+    doc.fontSize(9).fillColor(MUTED).text(`Référence : ${f.reference}     Inscrit le : ${new Date(f.createdAt).toLocaleDateString('fr-FR')}     Statut : ${f.statut}`);
+    doc.moveDown(0.4);
+    doc.fontSize(9).fillColor(MUTED).text(`Pièces jointes : ${f.piecesStatut}${f.piecesMotif ? ` — ${f.piecesMotif}` : ''}`);
+    doc.moveDown(0.3);
+
+    section('État civil');
+    ligne('Nom et prénoms', f.nomComplet);
+    ligne('Téléphone', f.telephone);
+    ligne('E-mail', f.email);
+    ligne('CNI N°', f.numeroCni);
+    ligne('Passeport N°', f.numeroPasseport);
+    ligne('Permis N°', f.numeroPermis);
+    ligne('Situation matrimoniale', f.situation === 'MARIEE' ? 'Marié(e)' : f.situation === 'CELIBATAIRE' ? 'Célibataire' : f.situation);
+
+    section('Localisation');
+    ligne('Pays', f.pays);
+    ligne('Région', f.region);
+    ligne('Ville', f.ville);
+    ligne('Village', f.village);
+    ligne('Campement', f.campement);
+
+    section('Situation matrimoniale');
+    ligne('Conjoint(e)', f.nomConjoint);
+    ligne('Naissance conjoint(e)', f.naissanceConjoint);
+    ligne('Enfants à charge', f.nombreEnfantsCharge);
+    ligne('Ayant droit', f.nomAyantDroit);
+    ligne('Naissance ayant droit', f.naissanceAyantDroit);
+
+    section('Vie professionnelle');
+    ligne('Nom d\'artiste', f.nomArtiste);
+    ligne('Début de carrière', f.debutCarriere);
+    ligne('Corps de métier', f.corpsMetier);
+
+    section('Personne morale (groupe ou association)');
+    ligne('Type de structure', f.typeStructure);
+    ligne('Nom du groupe / association', f.nomStructure);
+    ligne('Représentant légal', f.representantLegal);
+    ligne('Date de création', f.dateCreationStructure);
+    ligne('Spécialités', f.specialites);
+
+    section('Personne à contacter en cas d\'urgence');
+    ligne('Nom', f.urgenceNom);
+    ligne('Contacts', f.urgenceContacts);
+    ligne('Filiation', f.urgenceFiliation);
+
+    section('Compte d\'épargne');
+    ligne('Numéro de compte', f.compte?.numeroCompte);
+    ligne('RIB', f.compte?.rib);
+    ligne('Statut du compte', f.compte?.statut);
+    ligne('Code client', f.client?.code);
+
+    section('Provenance');
+    ligne('Distributeur', f.provenance?.distributeur ? `${f.provenance.distributeur.code} — ${f.provenance.distributeur.nomEntreprise} (${f.provenance.distributeur.ville})` : null);
+    ligne('Conseiller', f.provenance?.conseiller ? `${f.provenance.conseiller.prenom || ''} ${f.provenance.conseiller.nom || ''}`.trim() || f.provenance.conseiller.code : null);
+
+    if (f.pieces?.photo || f.pieces?.pieceRecto || f.pieces?.pieceVerso) {
+      section('Pièces jointes (liens)');
+      ligne('Photo d\'identité', f.pieces.photo);
+      ligne('Pièce recto', f.pieces.pieceRecto);
+      ligne('Pièce verso', f.pieces.pieceVerso);
+    }
+
+    doc.moveDown(1.5);
+    doc.fontSize(8).fillColor(GREY).text('Document généré le ' + new Date().toLocaleString('fr-FR') + ' — Semence Epargne (Le Crédit Panafricain). Vérifier l\'authenticité des pièces avant activation.', { align:'center' });
+
+    doc.end();
+  });
+}
+
+export async function pdfAdherent(req: Request, res: Response) {
+  try {
+    const distId = await agenceAutorisee(req.user!.role, req.user!.userId);
+    if (distId === null)
+      return res.status(403).json({ error:'Accès réservé à l\'agence UNARCI' });
+
+    const adhesion = await prisma.adherentUnarci.findUnique({ where:{ id:req.params.id }, include: ADHERENT_INCLUDE });
+    if (!adhesion) return res.status(404).json({ error:'Adhésion introuvable' });
+    if (distId !== '*' && adhesion.distributeurId !== distId)
+      return res.status(403).json({ error:'Cette adhésion ne dépend pas de votre agence' });
+
+    const pdf = await construireFichePdf(adherentFiche(adhesion));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="fiche-adherent-${adhesion.reference}.pdf"`);
+    res.setHeader('Content-Length', pdf.length);
+    return res.send(pdf);
+  } catch (err:any) { return res.status(500).json({ error:err.message }); }
+}
+
+// ─── RELANCES AUTOMATIQUES paiement en attente ─────────────────────────
+// 1ère relance à 48h, 2nde à 7 jours. Appelée périodiquement par server.ts.
+// On n'incrémente le compteur que si le SMS part réellement (sinon l'échec
+// est retenté au prochain cycle).
+export async function relancerAdherents(): Promise<{ premieres: number; secondes: number }> {
+  const now = new Date();
+  const h48 = new Date(now.getTime() - 48 * 3600 * 1000);
+  const d7  = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+
+  const cfg = await unarciConfig();
+  const numeroPaie = cfg.UNARCI_PAIE_NUMERO || UNARCI_CONST.PAIE_NUMERO_DEFAUT;
+
+  const enAttente = await prisma.adherentUnarci.findMany({
+    where: { statut:'INSCRIT', relanceCount:{ lt: 2 } },
+    select: { id:true, createdAt:true, relanceCount:true, montantAdhesion:true, user:{ select:{ id:true, telephone:true, prenom:true, nom:true } } },
+  });
+
+  let premieres = 0, secondes = 0;
+  for (const a of enAttente) {
+    if (!a.user?.telephone) continue;
+    const inscritLe = a.createdAt;
+    let etape = 0;
+    if (a.relanceCount === 0 && inscritLe <= h48) etape = 1;
+    else if (a.relanceCount === 1 && inscritLe <= d7) etape = 2;
+    if (!etape) continue;
+
+    const nom = `${a.user.prenom || ''} ${a.user.nom || ''}`.trim() || 'Cher(e) adhérent(e)';
+    const msg = etape === 1
+      ? `UNARCI LCP\nBonjour ${nom}!\nVotre adhesion est enregistree mais pas encore validee. Payez ${fCFA(Number(a.montantAdhesion))} par mobile money au ${numeroPaie} pour activer votre compte d'epargne.`
+      : `UNARCI LCP\nBonjour ${nom}!\nDernier rappel: validez votre adhesion en payant ${fCFA(Number(a.montantAdhesion))} au ${numeroPaie} aujourd'hui, sinon votre numero de compte sera perdu. Merci.`;
+
+    const r = await sendSms({ to:a.user.telephone, message: msg, userId:a.user.id });
+    if (!r.success) continue;
+
+    await prisma.adherentUnarci.update({ where:{ id:a.id }, data:{ relanceCount:{ increment:1 }, relanceAt:new Date() } });
+    if (etape === 1) premieres++; else secondes++;
+  }
+  return { premieres, secondes };
+}
 // Répond au besoin de traçabilité de provenance : à partir d'un identifiant,
 // on retrouve l'adhérent et TOUTE sa chaîne (agence/distributeur/région/
 // conseiller + compte/RIB).

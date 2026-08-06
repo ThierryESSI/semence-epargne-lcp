@@ -321,6 +321,15 @@ model AdherentUnarci {
   pieceVersoUrl         String?
   pieceVersoPublicId    String?
 
+  // Vérification des pièces par l'agence (EN_ATTENTE | CONFORMES | A_REVOIR)
+  piecesStatut          String         @default("EN_ATTENTE")
+  piecesMotif           String?
+  piecesVerifieesAt     DateTime?
+
+  // Relances paiement en attente (48h puis 7 jours)
+  relanceCount          Int            @default(0)
+  relanceAt             DateTime?
+
   userId                 String
   distributeurId         String
   conseillerId           String

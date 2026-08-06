@@ -8,8 +8,21 @@
 // backend/src/server.ts
 import 'dotenv/config';
 import app from './app';
+import { relancerAdherents } from './controllers/unarci.controller';
 
 const PORT = Number(process.env.PORT) || 4000;
+
+// Relances automatiques UNARCI (paiement en attente) : 1ère à 48h, 2nde à 7j.
+// Lancement 30s après le démarrage, puis toutes les 6h.
+function demarrerRelancesUnarci() {
+  const tour = () => {
+    relancerAdherents()
+      .then(r => console.log(`[Relances UNARCI] 1ères relances: ${r.premieres}, 2ndes: ${r.secondes}`))
+      .catch((err: any) => console.error('[Relances UNARCI] Erreur:', err?.message));
+  };
+  setTimeout(tour, 30_000);
+  setInterval(tour, 6 * 3600 * 1000);
+}
 
 app.listen(PORT, () => {
   console.log(`
@@ -17,4 +30,5 @@ app.listen(PORT, () => {
   console.log(`   → http://localhost:${PORT}`);
   console.log(`   → Environnement : ${process.env.NODE_ENV}
 `);
+  demarrerRelancesUnarci();
 });

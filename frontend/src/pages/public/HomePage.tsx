@@ -223,7 +223,7 @@ function PostGalerie({ photo }: { photo: any }) {
 
       {/* Image affichée en entier */}
       {photo.url && (
-        <img src={photo.url} alt={photo.titre || 'Publication'}
+        <img src={photo.url} alt={photo.titre || 'Publication'} loading="lazy"
           style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }} />
       )}
 
