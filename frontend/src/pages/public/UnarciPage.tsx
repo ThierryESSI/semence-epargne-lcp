@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import logo from '../../assets/logo.png';
+import WhatsAppButton from '../../components/ui/WhatsAppButton';
 
 const PRI  = '#F65A04';
 const PRID = '#C94800';
@@ -13,6 +14,10 @@ const BG   = '#F7F9FC';
 const WHITE = '#FFFFFF';
 const MUTED = '#6B7C9A';
 const BORDER = '#DDE6F0';
+
+// Pièces jointes — mêmes règles que le backend (max 5 Mo, JPG/PNG/WebP/PDF)
+const MAX_FILE = 5 * 1024 * 1024;
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
 const EMPTY = {
   pays:'Côte d\'Ivoire', region:'', ville:'', village:'', campement:'',
@@ -33,14 +38,30 @@ export default function UnarciPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<any>(null);
+  const [files, setFiles] = useState<{ photo?: File; pieceRecto?: File; pieceVerso?: File }>({});
+  const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
+  const [whatsapp, setWhatsapp] = useState('+2250708249583');
 
   useEffect(() => {
     api.get('/unarci/config')
       .then(r => { setMontant(r.data.data?.montant || 10000); setNumeroPaie(r.data.data?.numeroPaie || ''); })
       .catch(() => {});
+    api.get('/site-config/public')
+      .then(r => { if (r.data.data?.SITE_WHATSAPP) setWhatsapp(r.data.data.SITE_WHATSAPP); })
+      .catch(() => {});
   }, []);
 
   const set = (k: keyof Form) => (e: any) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  function onFile(k: keyof typeof files, file?: File) {
+    setFileErrors(prev => ({ ...prev, [k]: '' }));
+    if (!file) return setFiles(f => ({ ...f, [k]: undefined }));
+    if (!ALLOWED_TYPES.includes(file.type))
+      return setFileErrors(prev => ({ ...prev, [k]: 'Format non supporté. Accepté : JPG, PNG, WebP ou PDF.' }));
+    if (file.size > MAX_FILE)
+      return setFileErrors(prev => ({ ...prev, [k]: 'Fichier trop volumineux (5 Mo maximum).' }));
+    setFiles(f => ({ ...f, [k]: file }));
+  }
 
   const sections = [
     { id:'localisation', title:'1. Localisation', fields:[
@@ -96,9 +117,14 @@ export default function UnarciPage() {
     if (!form.telephone.trim()) return setError('Le téléphone est requis.');
     if (form.telephone.replace(/\D/g,'').length < 8) return setError('Numéro de téléphone invalide.');
     if (!form.region.trim()) return setError('La région est requise.');
+    if (Object.values(fileErrors).some(Boolean)) return setError('Vérifiez les pièces jointes (format et taille).');
     setLoading(true);
     try {
-      const { data } = await api.post('/unarci/adhesion', form);
+      // Envoi multipart : champs texte + pièces jointes (photo + pièce d'identité)
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => fd.append(k, String(v ?? '')));
+      Object.entries(files).forEach(([k, v]) => { if (v) fd.append(k, v); });
+      const { data } = await api.post('/unarci/adhesion', fd, { timeout: 90000 });
       setResult(data.data);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
@@ -199,6 +225,26 @@ export default function UnarciPage() {
               </fieldset>
             ))}
 
+            {/* 7. Pièces à fournir */}
+            <fieldset style={{ border:'none', borderBottom:`1px solid ${BORDER}`, padding:'22px 28px', margin:0 }}>
+              <legend style={{ fontWeight:700, fontSize:14, color:SEC, marginBottom:14, padding:0 }}>7. Pièces à fournir</legend>
+              <p style={{ fontSize:12, color:MUTED, margin:'0 0 16px', lineHeight:1.7 }}>
+                Joignez votre <strong>photo d'identité</strong> et une copie de votre <strong>pièce d'identité</strong>
+                (CNI, passeport ou permis de conduire). Formats acceptés : JPG, PNG, WebP ou PDF — 5 Mo maximum par fichier.
+              </p>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                <FileSlot id="f-photo" label="Photo d'identité" hint="Format passeport recommandé" wide
+                  file={files.photo} error={fileErrors.photo}
+                  onChange={f => onFile('photo', f)} />
+                <FileSlot id="f-recto" label="Pièce d'identité — recto" hint="CNI, passeport ou permis"
+                  file={files.pieceRecto} error={fileErrors.pieceRecto}
+                  onChange={f => onFile('pieceRecto', f)} />
+                <FileSlot id="f-verso" label="Pièce d'identité — verso" hint="Page arrière du document"
+                  file={files.pieceVerso} error={fileErrors.pieceVerso}
+                  onChange={f => onFile('pieceVerso', f)} />
+              </div>
+            </fieldset>
+
             <div style={{ padding:'22px 28px' }}>
               <button type="submit" disabled={loading}
                 style={{ width:'100%', background:`linear-gradient(135deg,${PRI},${PRID})`, color:WHITE, border:'none', borderRadius:12, padding:'15px', fontSize:16, fontWeight:800, cursor:loading?'not-allowed':'pointer', opacity:loading?0.6:1, fontFamily:'inherit', boxShadow:`0 4px 20px rgba(246,90,4,0.4)` }}>
@@ -212,6 +258,9 @@ export default function UnarciPage() {
           </form>
         )}
       </div>
+
+      {/* Bouton WhatsApp persistant (visible pendant le défilement) */}
+      <WhatsAppButton whatsapp={whatsapp} />
     </div>
   );
 }
@@ -221,6 +270,56 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
     <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px dashed #e2e8f0', fontSize:13 }}>
       <span style={{ color:MUTED }}>{label}</span>
       <span style={{ fontWeight:bold?800:600, color:DARK }}>{value}</span>
+    </div>
+  );
+}
+
+// ── Zone de dépôt d'une pièce jointe ─────────────────────────────
+function formatBytes(b: number) {
+  if (b < 1024) return `${b} o`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} Ko`;
+  return `${(b / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+function FileSlot({ id, label, hint, wide, file, error, onChange }: {
+  id: string; label: string; hint: string; wide?: boolean;
+  file?: File; error?: string;
+  onChange: (f?: File) => void;
+}) {
+  const isImage = !!file && file.type.startsWith('image/');
+  return (
+    <div style={wide ? { gridColumn: '1 / -1' } : {}}>
+      <label style={{ display:'block', fontSize:12, fontWeight:600, color:MUTED, marginBottom:5 }}>{label}</label>
+      <label htmlFor={id} style={{
+        display:'flex', alignItems:'center', gap:14, border:`1.5px dashed ${error ? '#e0a0a0' : BORDER}`,
+        borderRadius:10, padding: file ? '10px 14px' : '0 14px', cursor:'pointer',
+        background: error ? '#fdf3f2' : '#fbfdff', transition:'border-color .15s',
+      }}>
+        {file ? (
+          <>
+            {isImage && (
+              <img src={URL.createObjectURL(file)} alt={file.name} style={{ width:44, height:44, borderRadius:8, objectFit:'cover', flexShrink:0 }} />
+            )}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontWeight:600, fontSize:13, color:DARK, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{file.name}</div>
+              <div style={{ fontSize:11, color:MUTED }}>{formatBytes(file.size)}</div>
+            </div>
+            <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onChange(undefined); }}
+              style={{ background:'#fdecea', color:'#b3261e', border:'none', borderRadius:7, padding:'6px 12px', fontSize:11.5, fontWeight:700, cursor:'pointer', flexShrink:0 }}>
+              Retirer
+            </button>
+          </>
+        ) : (
+          <div style={{ textAlign:'center', padding:'16px 0', width:'100%' }}>
+            <div style={{ fontSize:22 }}>📎</div>
+            <div style={{ fontSize:13, color:SEC, fontWeight:600, marginTop:2 }}>Cliquez pour joindre un fichier</div>
+            <div style={{ fontSize:11, color:MUTED }}>{hint}</div>
+          </div>
+        )}
+      </label>
+      <input id={id} type="file" accept={ALLOWED_TYPES.join(',')} style={{ display:'none' }}
+        onChange={e => { onChange(e.target.files?.[0]); e.target.value = ''; }} />
+      {error && <div style={{ color:'#b3261e', fontSize:11.5, marginTop:5 }}>{error}</div>}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 // backend/src/routes/unarci.routes.ts
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { adherer, configUnarci, listerAdherents, getAdherent, activerAdherent, statsAdherents, rechercherAdherent, rejeterAdherent, supprimerAdherent } from '../controllers/unarci.controller';
@@ -22,9 +22,25 @@ const champsPieces = upload.fields([
   { name: 'pieceVerso',  maxCount: 1 },
 ]);
 
+// [ROBUSTESSE] Convertir les erreurs Multer (fichier trop gros, format invalide)
+// en 400 JSON propre au lieu d'un 500 générique en production.
+function multerAvecMessage(req: Request, res: Response, next: NextFunction) {
+  champsPieces(req as any, res, (err: any) => {
+    if (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE'
+        ? 'Fichier trop volumineux (5 Mo maximum par pièce)'
+        : String(err.message || '').includes('Format non supporté')
+          ? err.message
+          : 'Pièces jointes invalides. Formats acceptés : JPG, PNG, WebP, PDF.';
+      return res.status(400).json({ error: message });
+    }
+    next();
+  });
+}
+
 // ─── Public ──────────────────────────────────────────────────────────
 router.get('/config',  configUnarci);
-router.post('/adhesion', adhesionLimiter, champsPieces, adherer);
+router.post('/adhesion', adhesionLimiter, multerAvecMessage, adherer);
 
 // ─── Agence UNARCI (authentifiée) ────────────────────────────────────
 router.use('/agence', authenticate);

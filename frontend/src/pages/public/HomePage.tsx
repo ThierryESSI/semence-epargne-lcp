@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import logo from '../../assets/logo.png';
+import WhatsAppButton from '../../components/ui/WhatsAppButton';
 
 // ── Couleurs de marque ────────────────────────────────────────────
 const PRI  = '#F65A04';
@@ -576,6 +577,9 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* Bouton WhatsApp persistant (visible pendant le défilement) */}
+      <WhatsAppButton whatsapp={cms.SITE_WHATSAPP} />
     </div>
   );
 }
