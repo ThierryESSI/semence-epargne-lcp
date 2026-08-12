@@ -17,10 +17,10 @@ import { generateCodeActeur } from './crypto';
 export const UNARCI_CONST = {
   NOM_ENTREPRISE: 'UNARCI',
   EMAIL: 'unarci@semenceep.ci',
-  TEL: '0708249583',
+  TEL: '0705873039',
   VILLE: 'ABIDJAN',
   MONTANT_DEFAUT: '10000',
-  PAIE_NUMERO_DEFAUT: '+2250708249583',
+  PAIE_NUMERO_DEFAUT: '+2250705873039',
 };
 
 export const PERMISSIONS_UNARCI: Permission[] = [
