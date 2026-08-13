@@ -47,9 +47,15 @@ export async function sendSms(
     });
 
     const raw     = await response.text();
-    const success = response.ok;
+    // SpecialSMS renvoie HTTP 200 même en échec (ex: « crédits insuffisants »).
+    // On considère l'envoi réussi seulement si le corps ne contient aucun
+    // marqueur d'erreur connu.
+    const echec = !response.ok
+      || /insuffisant|balance|invalide|echec|échec|erreur|non envoyé|ne peut (?:etre|être) envoyé|clé vide|non effectue/i.test(raw);
 
-    if (success) console.log(`[SMS] OK → ${numero}`);
+    const success = !echec;
+
+    if (success) console.log(`[SMS] OK → ${numero} — ${raw}`);
     else         console.error(`[SMS] Echec → ${numero} — ${raw}`);
 
     return { success, raw };
