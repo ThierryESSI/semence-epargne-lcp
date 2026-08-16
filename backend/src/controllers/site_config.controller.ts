@@ -48,14 +48,17 @@ const CLES_PUBLIQUES = new Set([
 
 // Initialiser les configs par défaut (à appeler au démarrage)
 export async function initSiteConfig() {
+  let inserees = 0;
   for (const cfg of CONFIGS_DEFAUT) {
-    await prisma.siteConfig.upsert({
-      where:  { cle: cfg.cle },
-      update: {},
-      create: cfg,
-    }).catch(() => {});
+    try {
+      const existing = await prisma.siteConfig.findUnique({ where: { cle: cfg.cle } });
+      if (!existing) {
+        await prisma.siteConfig.create({ data: cfg });
+        inserees++;
+      }
+    } catch {}
   }
-  console.log('SiteConfig initialisé');
+  console.log(`SiteConfig initialisé (${inserees} nouvelle(s) clé(s) ajoutée(s))`);
 }
 
 // Lire les configs publiques (page d'accueil — sans auth)

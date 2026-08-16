@@ -41,8 +41,20 @@ router.post('/envoyer', authenticate, authorize('SUPER_ADMIN','MASTER'), async (
       smsText = fn(...(vars || []));
     }
 
+    const spkey = process.env.SMS_SPKEY || '';
+    const numeroNormalise = telephone.replace(/\D/g, '').startsWith('225')
+      ? telephone.replace(/\D/g, '')
+      : telephone.replace(/\D/g, '').startsWith('0') && telephone.replace(/\D/g, '').length === 10
+        ? '225' + telephone.replace(/\D/g, '')
+        : '225' + telephone.replace(/\D/g, '');
+
+    console.log(`[SMS TEST] → Dest: ${telephone} (normalisé: ${numeroNormalise}) | SPKEY ${spkey ? 'configurée (' + spkey.slice(0,6) + '...)' : 'MANQUANTE'} | Msg: ${smsText?.slice(0,80)}...`);
+
     const result = await sendSms({ to: telephone, message: smsText! });
-    return res.json({ success: result.success, raw: result.raw, error: result.error, message: smsText });
+
+    console.log(`[SMS TEST] Résultat: success=${result.success} raw=${result.raw} error=${result.error}`);
+
+    return res.json({ success: result.success, raw: result.raw, error: result.error, message: smsText, debug: { spkeyPresent: !!spkey, numeroNormalise } });
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 

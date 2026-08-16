@@ -49,7 +49,7 @@ router.get('/agence/adherents/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTE
 router.get('/agence/adherents/:id/pdf', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), pdfAdherent);
 router.post('/agence/pieces/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), validerPieces);
 router.delete('/agence/adherents/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), supprimerAdherent);
-router.patch('/agence/adherents/:id', authorize('SUPER_ADMIN','MASTER'), modifierAdherent);
+router.patch('/agence/adherents/:id', authorize('SUPER_ADMIN','MASTER','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), modifierAdherent);
 router.get('/agence/recherche',   authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), rechercherAdherent);
 router.get('/agence/stats',       authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), statsAdherents);
 router.post('/agence/activer/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), activerAdherent);

@@ -25,7 +25,7 @@ const piecesBadge = (s: string) => {
 };
 
 // ─── Fiche détaillée (modale) ─────────────────────────────────────
-function FicheAdherent({ fiche, onClose, onValider, onPdf, saving, pdfLoading }: any) {
+function FicheAdherent({ fiche, onClose, onValider, onPdf, onModifier, saving, pdfLoading, canEdit }: any) {
   if (!fiche) return null;
   const st = PIECES_STYLES[fiche.piecesStatut] || PIECES_STYLES.EN_ATTENTE;
 
@@ -95,6 +95,11 @@ function FicheAdherent({ fiche, onClose, onValider, onPdf, saving, pdfLoading }:
             ✗ Pièces à revoir
           </Btn>
         )}
+        {canEdit && (
+          <Btn size="sm" variant="secondary" onClick={() => onModifier(fiche)}>
+            ✎ Modifier les informations
+          </Btn>
+        )}
         <Btn size="sm" variant="ghost" loading={pdfLoading} onClick={onPdf} style={{ marginLeft:'auto' }}>
           <Icon d={ICONS.download} size={15} /> Exporter PDF
         </Btn>
@@ -156,6 +161,100 @@ function FicheAdherent({ fiche, onClose, onValider, onPdf, saving, pdfLoading }:
   );
 }
 
+// ─── Modale de modification ──────────────────────────────────────
+const CHAMPS_MODIFIABLES = [
+  { key:'nomComplet', label:'Nom complet', type:'text' },
+  { key:'region', label:'Région', type:'text' },
+  { key:'ville', label:'Ville', type:'text' },
+  { key:'village', label:'Village', type:'text' },
+  { key:'campement', label:'Campement', type:'text' },
+  { key:'numeroCni', label:'N° CNI', type:'text' },
+  { key:'numeroPasseport', label:'N° Passeport', type:'text' },
+  { key:'numeroPermis', label:'N° Permis', type:'text' },
+  { key:'situation', label:'Situation matrimoniale', type:'select', options:['','CELIBATAIRE','MARIEE','DIVORCEE','VEUVE'] },
+  { key:'nomConjoint', label:'Conjoint(e)', type:'text' },
+  { key:'nombreEnfantsCharge', label:'Enfants à charge', type:'number' },
+  { key:'nomArtiste', label:"Nom d'artiste", type:'text' },
+  { key:'corpsMetier', label:'Corps de métier', type:'text' },
+  { key:'urgenceNom', label:'Contact urgence', type:'text' },
+  { key:'urgenceContacts', label:'Téléphone urgence', type:'text' },
+];
+
+const CHAMPS_ADMIN = [
+  { key:'statut', label:'Statut', type:'select', options:['INSCRIT','ACTIF','REJETE'] },
+  { key:'montantAdhesion', label:'Montant adhésion (FCFA)', type:'number' },
+  { key:'numeroPaie', label:'N° de paie', type:'text' },
+];
+
+function EditAdherentModal({ fiche, onClose, onSave, isAdmin, saving }: any) {
+  const [form, setForm] = useState<Record<string, any>>({});
+  useEffect(() => {
+    if (fiche) {
+      const init: Record<string, any> = {};
+      [...CHAMPS_MODIFIABLES, ...CHAMPS_ADMIN].forEach(c => { init[c.key] = fiche[c.key] ?? ''; });
+      setForm(init);
+    }
+  }, [fiche]);
+
+  if (!fiche) return null;
+
+  const champStyle = { width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const };
+
+  return (
+    <Modal title={`Modifier — ${fiche.nomComplet}`} onClose={onClose} wide>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        {/* Infos personnelles */}
+        <div style={{ fontSize:11, fontWeight:800, color:C.primary, textTransform:'uppercase', letterSpacing:'.06em' }}>Informations personnelles</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          {CHAMPS_MODIFIABLES.map(c => (
+            <div key={c.key}>
+              <label style={{ display:'block', fontSize:11, fontWeight:600, color:C.textMuted, marginBottom:3 }}>{c.label}</label>
+              {c.type === 'select' ? (
+                <select value={form[c.key] || ''} onChange={e => setForm(f => ({ ...f, [c.key]: e.target.value }))} style={champStyle}>
+                  <option value="">—</option>
+                  {c.options!.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <input type={c.type} value={form[c.key] || ''} onChange={e => setForm(f => ({ ...f, [c.key]: e.target.value }))} style={champStyle} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Admin uniquement */}
+        {isAdmin && (
+          <>
+            <div style={{ fontSize:11, fontWeight:800, color:C.red, textTransform:'uppercase', letterSpacing:'.06em', marginTop:8 }}>
+              Actions administrateur (SUPER_ADMIN / MASTER)
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              {CHAMPS_ADMIN.map(c => (
+                <div key={c.key}>
+                  <label style={{ display:'block', fontSize:11, fontWeight:600, color:C.textMuted, marginBottom:3 }}>{c.label}</label>
+                  {c.type === 'select' ? (
+                    <select value={form[c.key] || ''} onChange={e => setForm(f => ({ ...f, [c.key]: e.target.value }))} style={champStyle}>
+                      {c.options!.map(o => <option key={o} value={o}>{o || '—'}</option>)}
+                    </select>
+                  ) : (
+                    <input type={c.type} value={form[c.key] || ''} onChange={e => setForm(f => ({ ...f, [c.key]: e.target.value }))} style={champStyle} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:8 }}>
+          <Btn variant="ghost" onClick={onClose}>Annuler</Btn>
+          <Btn loading={saving} onClick={() => onSave(form)}>
+            Sauvegarder
+          </Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Page principale ──────────────────────────────────────────────
 export default function UnarciAgency() {
   const [adherents, setAdherents] = useState<any[]>([]);
@@ -171,6 +270,15 @@ export default function UnarciAgency() {
   const [ficheLoading, setFicheLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  // État modification
+  const [editOpen, setEditOpen] = useState(false);
+  const [editFiche, setEditFiche] = useState<any>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Rôle utilisateur (depuis le store)
+  const userRole = (() => { try { return JSON.parse(atob(localStorage.getItem('access_token')?.split('.')[1] || '')).role; } catch { return ''; } })();
+  const isAdmin = userRole === 'SUPER_ADMIN' || userRole === 'MASTER';
 
   async function load() {
     setLoading(true); setError('');
@@ -239,6 +347,35 @@ export default function UnarciAgency() {
     finally { setPdfLoading(false); }
   }
 
+  function openModifier(ficheData: any) {
+    setEditFiche(ficheData);
+    setEditOpen(true);
+  }
+
+  async function saveModifier(form: Record<string, any>) {
+    setEditSaving(true); setError('');
+    try {
+      await api.patch(`/unarci/agence/adherents/${editFiche.id}`, form);
+      setSuccess('Informations mises à jour avec succès');
+      setEditOpen(false);
+      load();
+      if (fiche?.id === editFiche.id) openFiche({ id: editFiche.id });
+    } catch (e: any) { setError(e.response?.data?.error || 'Erreur de sauvegarde'); }
+    finally { setEditSaving(false); }
+  }
+
+  async function supprimer(id: string, nom: string) {
+    if (!confirm(`Supprimer définitivement l'adhérent "${nom}" ? Cette action est irréversible.`)) return;
+    setSaving('delete-' + id); setError(''); setSuccess('');
+    try {
+      await api.delete(`/unarci/agence/adherents/${id}`);
+      setSuccess(`Adhérent "${nom}" supprimé.`);
+      if (fiche?.id === id) setFiche(null);
+      load();
+    } catch (e: any) { setError(e.response?.data?.error || 'Erreur de suppression'); }
+    finally { setSaving(null); }
+  }
+
   const badge = (s: string) => {
     const map: Record<string, [string, string]> = {
       INSCRIT: ['#a16207', '#fff8e7'],
@@ -293,15 +430,27 @@ export default function UnarciAgency() {
                 <TD><Badge v={b.label} /></TD>
                 <TD>{new Date(a.createdAt).toLocaleDateString('fr-CI')}</TD>
                 <TD onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                     <button onClick={() => openFiche(a)} title="Voir la fiche détaillée"
                       style={{ background:C.secondaryPl, border:'none', borderRadius:7, padding:'6px 9px', cursor:'pointer', color:C.blue, display:'flex', alignItems:'center' }}>
                       <Icon d={ICONS.eye} size={15} />
                     </button>
                     {a.statut === 'INSCRIT' && (
                       <Btn size="sm" loading={activating === a.id} onClick={() => activer(a.id, a.nomComplet)}>
-                        Valider paiement
+                        Valider
                       </Btn>
+                    )}
+                    {(isAdmin || userRole === 'CONSEILLER' || userRole === 'DISTRIBUTEUR_AGREE' || userRole === 'DISTRIBUTEUR_INTERNE') && (
+                      <button onClick={() => openModifier(a)} title="Modifier les informations"
+                        style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:7, padding:'6px 9px', cursor:'pointer', color:C.primary, display:'flex', alignItems:'center', fontSize:12, fontWeight:600 }}>
+                        <Icon d={ICONS.params} size={14} />
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button onClick={() => supprimer(a.id, a.nomComplet)} title="Supprimer cet adhérent"
+                        style={{ background:'#fff', border:`1px solid ${C.redPale}`, borderRadius:7, padding:'6px 9px', cursor:'pointer', color:C.red, display:'flex', alignItems:'center', fontSize:12, fontWeight:600 }}>
+                        <Icon d={ICONS.trash} size={14} />
+                      </button>
                     )}
                   </div>
                 </TD>
@@ -317,9 +466,21 @@ export default function UnarciAgency() {
         onClose={() => setFiche(null)}
         onValider={validerPieces}
         onPdf={downloadPdf}
+        onModifier={openModifier}
         saving={saving}
         pdfLoading={pdfLoading}
+        canEdit={isAdmin || userRole === 'CONSEILLER' || userRole === 'DISTRIBUTEUR_AGREE' || userRole === 'DISTRIBUTEUR_INTERNE'}
       />
+
+      {editOpen && (
+        <EditAdherentModal
+          fiche={editFiche}
+          onClose={() => setEditOpen(false)}
+          onSave={saveModifier}
+          isAdmin={isAdmin}
+          saving={editSaving}
+        />
+      )}
     </div>
   );
 }

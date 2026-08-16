@@ -7,11 +7,14 @@ const SMS_API_URL = process.env.SMS_API_URL || 'https://www.specialsms.net/mysms
 const SMS_SPKEY   = process.env.SMS_SPKEY   || '';
 
 // Normalise le numéro au format international CI (225XXXXXXXX)
+// CI : 0X XX XX XX XX (10 chiffres) → 2250XXXXXXXX (13 chiffres)
+// CI : XX XX XX XX (8 chiffres) → 225XXXXXXXX (11 chiffres)
 function normaliserNumero(tel: string): string {
   const clean = tel.replace(/\D/g, '');
   if (clean.startsWith('225')) return clean;
-  if (clean.startsWith('0') && clean.length === 10) return '225' + clean.slice(1);
-  if (clean.length === 8) return '225' + clean;
+  if (clean.startsWith('0') && clean.length === 10) return '225' + clean;       // 0747196784 → 2250747196784
+  if (clean.length === 8) return '225' + clean;                                 // 74719678 → 22574719678
+  if (clean.length === 10) return '2250' + clean;                               // 7471967840 → 22507471967840 (fallback)
   return clean;
 }
 

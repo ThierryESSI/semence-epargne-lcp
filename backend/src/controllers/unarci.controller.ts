@@ -464,21 +464,36 @@ export async function statsAdherents(req: Request, res: Response) {
   } catch (err:any) { return res.status(500).json({ error:err.message }); }
 }
 
-// ─── SUPER_ADMIN : modifier un adhérent (statut, données, pièces) ─────
+// ─── MODIFIER un adhérent (statut, données, pièces) ─────────────
+// SUPER_ADMIN/MASTER : accès complet (statut, montant, numeroPaie, etc.)
+// CONSEILLER/DIST : uniquement les infos personnelles manquantes
 export async function modifierAdherent(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const role = req.user!.role;
-    if (role !== 'SUPER_ADMIN' && role !== 'MASTER')
-      return res.status(403).json({ error:'Réservé au SUPER_ADMIN / MASTER' });
 
     const adhesion = await prisma.adherentUnarci.findUnique({ where:{ id } });
     if (!adhesion) return res.status(404).json({ error:'Adhésion introuvable' });
+
+    // Vérifier l'autorisation agence pour les non-super-admin
+    if (role !== 'SUPER_ADMIN' && role !== 'MASTER') {
+      const distId = await agenceAutorisee(role, req.user!.userId);
+      if (distId === null) return res.status(403).json({ error:'Accès réservé à l\'agence UNARCI' });
+      if (distId !== '*' && adhesion.distributeurId !== distId)
+        return res.status(403).json({ error:'Cette adhésion ne dépend pas de votre agence' });
+    }
+
+    // Champs réservés SUPER_ADMIN/MASTER
+    const CHAMPS_RESTREINTS = ['statut', 'montantAdhesion', 'numeroPaie', 'motif'];
+    const isRestricted = ['SUPER_ADMIN', 'MASTER'].includes(role) ? false : CHAMPS_RESTREINTS.some(c => req.body[c] !== undefined);
 
     const { statut, motif, nomComplet, region, ville, village, campement,
             numeroCni, numeroPasseport, numeroPermis, situation,
             nomConjoint, nombreEnfantsCharge, nomArtiste, corpsMetier,
             urgenceNom, urgenceContacts, numeroPaie, montantAdhesion } = req.body;
+
+    if (isRestricted)
+      return res.status(403).json({ error:'Vous ne pouvez modifier que les informations personnelles (pas le statut, montant ou numéro de paie)' });
 
     const updateData: any = {};
     if (statut && ['INSCRIT','ACTIF','REJETE'].includes(statut)) {
