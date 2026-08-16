@@ -44,14 +44,14 @@ router.post('/adhesion', adhesionLimiter, multerAvecMessage, adherer);
 
 // ─── Agence UNARCI (authentifiée) ────────────────────────────────────
 router.use('/agence', authenticate);
-router.get('/agence/adherents', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), listerAdherents);
-router.get('/agence/adherents/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), getAdherent);
-router.get('/agence/adherents/:id/pdf', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), pdfAdherent);
-router.post('/agence/pieces/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), validerPieces);
+router.get('/agence/adherents', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), listerAdherents);
+router.get('/agence/adherents/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), getAdherent);
+router.get('/agence/adherents/:id/pdf', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), pdfAdherent);
+router.post('/agence/pieces/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), validerPieces);
 router.delete('/agence/adherents/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), supprimerAdherent);
-router.get('/agence/recherche',   authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), rechercherAdherent);
-router.get('/agence/stats',       authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), statsAdherents);
-router.post('/agence/activer/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), activerAdherent);
-router.post('/agence/rejeter/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE'), rejeterAdherent);
+router.get('/agence/recherche',   authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), rechercherAdherent);
+router.get('/agence/stats',       authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), statsAdherents);
+router.post('/agence/activer/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), activerAdherent);
+router.post('/agence/rejeter/:id', authorize('MASTER','SUPER_ADMIN','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE','CONSEILLER'), rejeterAdherent);
 
 export default router;

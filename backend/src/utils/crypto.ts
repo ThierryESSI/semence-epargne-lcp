@@ -40,7 +40,9 @@ export function verifyQrToken(token: string): { valid: boolean; payload?: any } 
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
     const expected = crypto.createHmac('sha256', QR_KEY).update(decoded.data).digest('hex');
-    if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(decoded.sig))) return { valid: false };
+    const sigBuf   = Buffer.from(decoded.sig, 'hex');
+    if (Buffer.from(expected).length !== sigBuf.length) return { valid: false };
+    if (!crypto.timingSafeEqual(Buffer.from(expected), sigBuf)) return { valid: false };
     return { valid: true, payload: JSON.parse(decoded.data) };
   } catch {
     return { valid: false };
@@ -58,8 +60,10 @@ export function hashCode(code: string): string {
 
 export function verifyHashedCode(code: string, hash: string): boolean {
   const expected = hashCode(code);
+  const hashBuf  = Buffer.from(hash, 'hex');
   try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(hash));
+    if (Buffer.from(expected).length !== hashBuf.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(expected), hashBuf);
   } catch {
     return false;
   }
@@ -87,6 +91,26 @@ export function generateLotRef(): string {
   let out = '';
   for (let i = 0; i < 6; i++) out += alphabet[crypto.randomInt(alphabet.length)];
   return `LOT-${out}`;
+}
+
+// ─── Mot de passe temporaire sécurisé ────────────────────────────────
+// 12 caractères : majuscule + minuscule + chiffre + spécial (~80 bits d'entropie)
+export function generateTempPassword(): string {
+  const upper   = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower   = 'abcdefghjkmnpqrstuvwxyz';
+  const digits  = '23456789';
+  const special = '!@#$%&*';
+  const all     = upper + lower + digits + special;
+  const pick = (set: string) => set[crypto.randomInt(set.length)];
+  let pwd = pick(upper) + pick(lower) + pick(digits) + pick(special);
+  for (let i = 4; i < 12; i++) pwd += pick(all);
+  // Mélanger le tableau de caractères
+  const arr = pwd.split('');
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.join('');
 }
 
 // ─── Code d'acteur (client, conseiller, distributeur) ────────────────

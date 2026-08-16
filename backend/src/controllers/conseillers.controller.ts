@@ -12,6 +12,7 @@ import prisma from '../utils/prisma';
 import { generateCodeActeur } from '../utils/crypto';
 import { Role } from '@prisma/client';
 import { upgradeRole, mergePermissions, PERMISSIONS_CONSEILLER } from '../utils/roles';
+import { parsePage, parseLimit } from '../utils/format';
 
 export async function creerConseiller(req: Request, res: Response) {
   try {
@@ -23,11 +24,23 @@ export async function creerConseiller(req: Request, res: Response) {
     if (!nom)       manquants.push('nom');
     if (manquants.length > 0) return res.status(400).json({ error: `Champs manquants : ${manquants.join(', ')}` });
 
+    // [SÉCURITÉ] Validation du type de conseiller
+    const typesValides = ['STAND', 'MOBILE', 'AGENT_CAISSE', 'CHEF_AGENCE', 'CHARGE_COMPTE'];
+    if (!typesValides.includes(type))
+      return res.status(400).json({ error: `Type invalide. Valeurs autorisées : ${typesValides.join(', ')}` });
+
+    // [RÈGLE MÉTIER] Un distributeur ne crée que des conseillers MOBILE ou STAND
+    const role = req.user!.role;
+    if (role === 'DISTRIBUTEUR_INTERNE' || role === 'DISTRIBUTEUR_AGREE') {
+      if (!['STAND', 'MOBILE'].includes(type))
+        return res.status(403).json({ error: 'Les distributeurs ne peuvent créer que des conseillers de type STAND ou MOBILE' });
+    }
+
     // Résoudre distributeurId.
     // [SÉCURITÉ] Un distributeur ne crée que ses propres conseillers :
     // on ignore totalement le distributeurId fourni dans le corps de requête.
     let distributeurId: string | undefined;
-    if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
+    if (role === 'DISTRIBUTEUR_INTERNE' || role === 'DISTRIBUTEUR_AGREE') {
       const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
       distributeurId = d?.id;
     } else {
@@ -110,8 +123,8 @@ export async function creerConseiller(req: Request, res: Response) {
 }
 
 export async function listerConseillers(req: Request, res: Response) {
-  const page  = parseInt(req.query.page as string || '1');
-  const limit = parseInt(req.query.limit as string || '20');
+  const page  = parsePage(req.query.page as string);
+  const limit = parseLimit(req.query.limit as string);
 
   const where: any = {};
   if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {

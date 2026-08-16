@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "prisma generate && tsc",
-    "start": "prisma db push --accept-data-loss && npm run db:seed && node dist/server.js",
+    "start": "prisma migrate deploy && node dist/server.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push --accept-data-loss",
@@ -19,11 +19,9 @@
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.2.0",
     "cors": "^2.8.5",
-    "decimal.js": "^10.4.3",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
     "express-rate-limit": "^7.2.0",
-    "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
@@ -34,9 +32,7 @@
     "qrcode": "^1.5.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
-    "uuid": "^9.0.0",
-    "xlsx": "^0.18.5",
-    "zod": "^3.22.4"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -49,7 +45,6 @@
     "@types/nodemailer": "^6.4.14",
     "@types/pdfkit": "^0.13.4",
     "@types/qrcode": "^1.5.5",
-    "@types/uuid": "^9.0.7",
     "ts-node-dev": "^2.0.0"
   },
   "engines": {

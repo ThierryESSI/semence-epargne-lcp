@@ -11,12 +11,11 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import PDFDocument from 'pdfkit';
 import prisma from '../utils/prisma';
-import { generateRef, generateCodeActeur } from '../utils/crypto';
+import { generateRef, generateCodeActeur, generateTempPassword } from '../utils/crypto';
 import { sendSms, tpl } from '../utils/sms';
-import { ensureUnarciInfra, unarciConfig, generatePassword, UNARCI_CONST } from '../utils/unarci';
+import { ensureUnarciInfra, unarciConfig, UNARCI_CONST } from '../utils/unarci';
 import { uploadToCloudinary, deleteFromCloudinary } from '../utils/upload';
-
-function fCFA(n: number): string { return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' F'; }
+import { fCFA, parsePage, parseLimit } from '../utils/format';
 
 // Candidats de numéro pour détecter un doublon (formats variés)
 function candidatsTel(tel: string): string[] {
@@ -133,7 +132,7 @@ export async function adherer(req: Request, res: Response) {
     const emailFinal = body.email
       ? String(body.email).trim().toLowerCase()
       : `${telDigits}@semence-noemail.ci`;
-    const pwd   = generatePassword();
+    const pwd   = generateTempPassword();
     const appUrl = process.env.FRONTEND_URL || 'https://app.semenceep.ci';
 
     const codeClient   = generateCodeActeur('CLI');
@@ -282,6 +281,13 @@ async function agenceAutorisee(role: string, actorUserId: string): Promise<strin
     if (!d || (cfg.UNARCI_DIST_ID && d.id !== cfg.UNARCI_DIST_ID)) return null;
     return d.id;
   }
+  if (role === 'CONSEILLER') {
+    const c = await prisma.conseiller.findFirst({ where: { userId: actorUserId } });
+    if (!c) return null;
+    const cfg = await unarciConfig();
+    if (!cfg.UNARCI_DIST_ID || c.distributeurId !== cfg.UNARCI_DIST_ID) return null;
+    return c.distributeurId;
+  }
   return null;
 }
 
@@ -347,6 +353,8 @@ export async function listerAdherents(req: Request, res: Response) {
     if (distId === null)
       return res.status(403).json({ error:'Accès réservé à l\'agence UNARCI' });
     const { statut, search } = req.query;
+    const page  = parsePage(req.query.page as string);
+    const limit = parseLimit(req.query.limit as string, 200);
 
     const where: any = {};
     if (distId !== '*') where.distributeurId = distId;
@@ -362,7 +370,7 @@ export async function listerAdherents(req: Request, res: Response) {
     const [total, adherents] = await Promise.all([
       prisma.adherentUnarci.count({ where }),
       prisma.adherentUnarci.findMany({
-        where, orderBy:{ createdAt:'desc' }, take: 200,
+        where, orderBy:{ createdAt:'desc' }, skip:(page-1)*limit, take: limit,
         include: {
           user: { select:{ telephone:true, email:true, actif:true, compte:{ select:{ numeroCompte:true, statut:true } } } },
         },
@@ -399,9 +407,14 @@ export async function activerAdherent(req: Request, res: Response) {
     const adhesion = await prisma.adherentUnarci.findUnique({ where:{ id } });
     if (!adhesion) return res.status(404).json({ error:'Adhésion introuvable' });
 
-    if (req.user!.role === 'DISTRIBUTEUR_AGREE' || req.user!.role === 'DISTRIBUTEUR_INTERNE') {
+    const role = req.user!.role;
+    if (role === 'DISTRIBUTEUR_AGREE' || role === 'DISTRIBUTEUR_INTERNE') {
       const d = await prisma.distributeur.findFirst({ where:{ userId:req.user!.userId } });
       if (d?.id !== adhesion.distributeurId)
+        return res.status(403).json({ error:'Cette adhésion ne dépend pas de votre agence' });
+    } else if (role === 'CONSEILLER') {
+      const c = await prisma.conseiller.findFirst({ where:{ userId:req.user!.userId } });
+      if (!c || c.distributeurId !== adhesion.distributeurId)
         return res.status(403).json({ error:'Cette adhésion ne dépend pas de votre agence' });
     }
     if (adhesion.statut === 'ACTIF')

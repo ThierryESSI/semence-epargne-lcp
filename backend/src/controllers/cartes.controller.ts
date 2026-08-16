@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { generateRef, generateRefCourt, generateLotRef, generateCode4, hashCode, verifyHashedCode, verifyQrToken } from '../utils/crypto';
 import { generateQrAuth, generateQrEpargne } from '../utils/qrcode';
+import { fCFA, parsePage, parseLimit } from '../utils/format';
 
 import { notifier, emailTpl } from '../utils/notifications';
 import { enregistrerVersement } from '../services/epargne.service';
@@ -53,8 +54,8 @@ export async function emettreCartes(req: Request, res: Response) {
 
 // Liste des lots de cartes avec statistiques
 export async function listerLots(req: Request, res: Response) {
-  const page   = parseInt(req.query.page as string || '1');
-  const limit  = parseInt(req.query.limit as string || '20');
+  const page   = parsePage(req.query.page as string);
+  const limit  = parseLimit(req.query.limit as string);
   const [total, lots] = await Promise.all([
     prisma.lotCarte.count(),
     prisma.lotCarte.findMany({ skip:(page-1)*limit, take:limit, orderBy:{ createdAt:'desc' } }),
@@ -185,7 +186,7 @@ export async function activerCarte(req: Request, res: Response) {
 
     // [FIX] Notification multi-canal SANS répartition des frais côté client
     if (user) {
-      const msgSms = `LCP SEMENCE: Recharge OK ${user.prenom}!\nCarte: ${carte.reference}\n+${fmt(net)} credite.\nSolde: ${fmt(nouveauSolde)}.\nRef: ${transaction.reference}`;
+      const msgSms = `LCP SEMENCE: Recharge OK ${user.prenom}!\nCarte: ${carte.reference}\n+${fCFA(net)} credite.\nSolde: ${fCFA(nouveauSolde)}.\nRef: ${transaction.reference}`;
       const tplEmail = emailTpl.depotSucces(`${user.prenom} ${user.nom}`, transaction.reference, mnt, net, nouveauSolde);
       notifier({
         userId:        user.id,
@@ -222,8 +223,6 @@ export async function activerCarte(req: Request, res: Response) {
     return res.status(500).json({ error:`Erreur lors de l'activation : ${err.message}` });
   }
 }
-
-function fmt(n: number) { return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' F'; }
 
 export async function attribuerCarte(req: Request, res: Response) {
   const { distributeurId, conseillerId } = req.body;
@@ -268,8 +267,8 @@ export async function supprimerCarte(req: Request, res: Response) {
 }
 
 export async function listerCartes(req: Request, res: Response) {
-  const page   = parseInt(req.query.page as string || '1');
-  const limit  = parseInt(req.query.limit as string || '20');
+  const page   = parsePage(req.query.page as string);
+  const limit  = parseLimit(req.query.limit as string);
   const statut = req.query.statut as string | undefined;
   const lot    = req.query.lot as string | undefined;
   const where: any = {};

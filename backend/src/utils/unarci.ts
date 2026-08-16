@@ -8,11 +8,10 @@
 //  - Conseiller rattaché à ce distributeur
 //  - Compte login de l'agence (identifiants stockés en SiteConfig)
 //  - Paramètres SiteConfig (montant adhésion, numéro de paie)
-import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import prisma from './prisma';
 import { Role, TypeDistributeur, TypeConseiller, TypeCompte, StatutCompte, Permission } from '@prisma/client';
-import { generateCodeActeur } from './crypto';
+import { generateCodeActeur, generateTempPassword } from './crypto';
 
 export const UNARCI_CONST = {
   NOM_ENTREPRISE: 'UNARCI',
@@ -41,9 +40,7 @@ async function findFreeTelephone(base: string): Promise<string> {
   return tel;
 }
 
-export function generatePassword(): string {
-  return crypto.randomBytes(6).toString('base64url').slice(0, 8);
-}
+// Ancien generatePassword supprimé — utiliser generateTempPassword depuis crypto.ts
 
 // ─── Config / identifiants UNARCI ─────────────────────────────────────
 export async function unarciConfig() {
@@ -75,7 +72,7 @@ export async function ensureUnarciInfra() {
     let user = await prisma.user.findUnique({ where:{ email: UNARCI_CONST.EMAIL } });
     let pwd = '';
     if (!user) {
-      pwd = generatePassword();
+      pwd = generateTempPassword();
       user = await prisma.user.create({
         data: {
           email: UNARCI_CONST.EMAIL,

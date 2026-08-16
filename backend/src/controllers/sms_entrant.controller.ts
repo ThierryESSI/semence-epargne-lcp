@@ -15,11 +15,11 @@ import { verifyHashedCode, generateRef } from '../utils/crypto';
 import { sendSms } from '../utils/sms';
 import { sendWhatsApp } from '../utils/notifications';
 import { enregistrerVersement } from '../services/epargne.service';
+import { fCFA } from '../utils/format';
 
 // [SÉCURITÉ] Fail-closed : pas de secret par défaut. Si SMS_WEBHOOK_SECRET
 // n'est pas défini, le webhook refuse les requêtes (évite un secret connu).
 const WEBHOOK_SECRET = process.env.SMS_WEBHOOK_SECRET;
-function fmt(n: number) { return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' F'; }
 
 // Garde anti-force-brute : max 5 codes erronés par carte sur une fenêtre de 15 min
 const tentativeEchecs = new Map<string, { count: number; resetAt: number }>();
@@ -92,7 +92,7 @@ export async function webhookSmsEntrant(req: Request, res: Response) {
   if (!expediteur || !message) return res.status(400).json({ error: 'expediteur et message requis' });
 
   const telNormalise = normaliserTelEnvoi(expediteur);
-  console.log(`[SMS Entrant] De: ${telNormalise} → "${message}"`);
+  console.log(`[SMS Entrant] SMS recu de ${telNormalise.slice(0,4)}****`);
 
   // Répondre immédiatement à SpecialSMS (éviter timeout webhook)
   res.status(200).json({ received: true });
@@ -112,9 +112,9 @@ async function alerterRechargeSMS(canal: string, compte: any, refCarte: string, 
     const message = `LCP SEMENCE: RECHARGE ${canal} — ${compte.user.prenom} ${compte.user.nom}
 Compte: ${compte.numeroCompte}
 Carte: ${refCarte}
-Montant: ${fmt(montant)}
-Net: ${fmt(net)}
-Solde: ${fmt(solde)}
+Montant: ${fCFA(montant)}
+Net: ${fCFA(net)}
+Solde: ${fCFA(solde)}
 Ref: ${reference}`;
     sendSms({ to: tel, message }).catch(() => {});
     sendWhatsApp(tel, message).catch(() => {});
@@ -222,15 +222,15 @@ async function traiterSmsRecharge(telExpéditeur: string, message: string, canal
   const nouveauSolde  = Number(compteUpdated?.solde || 0);
 
   await prisma.auditLog.create({ data: { action:'SMS_RECHARGE_SUCCES', entite:'Transaction', entiteId:transaction.id, actorId:compte.userId, details:{ canal, montant, frais, net, refCarte, telExpéditeur } } });
-  console.log(`[SMS Entrant] ✅ ${compte.user.prenom} ${compte.user.nom} +${fmt(net)} | Solde: ${fmt(nouveauSolde)}`);
+  console.log(`[SMS Entrant] ✅ Recharge ${canal} succes`);
 
   // [ALERTE] Prévenir le numéro dédié (MASTER/équipe) via SMS + WhatsApp
   await alerterRechargeSMS(canal, compte, refCarte, montant, net, nouveauSolde, transaction.reference);
 
   await sendSms({ to:telExpéditeur, message:`LCP SEMENCE: Recharge OK ${compte.user.prenom} ${compte.user.nom}!
 Carte: ${refCarte}
-+${fmt(net)} credite.
-Solde: ${fmt(nouveauSolde)}.
++${fCFA(net)} credite.
+Solde: ${fCFA(nouveauSolde)}.
 Ref: ${transaction.reference}`, userId:compte.userId, transactionId:transaction.id }).catch(() => {});
 }
 
@@ -304,7 +304,7 @@ export async function whatsappEntrant(req: Request, res: Response) {
 
     if (!expediteur || !texte) return;
 
-    console.log(`[WhatsApp Entrant] De: +${expediteur} → "${texte}"`);
+    console.log(`[WhatsApp Entrant] Message recu de +${expediteur.slice(0,4)}****`);
 
     // Meme logique de traitement que le SMS GSM
     const telFormat = '+' + expediteur;

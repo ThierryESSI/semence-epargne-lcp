@@ -1,5 +1,6 @@
 // backend/src/utils/sms.ts — SpecialSMS (specialsms.net)
 // © 2024-2026 MaGestion Facile — M. Thierry ESSI
+import { fCFA } from './format';
 
 const SMS_API_URL = process.env.SMS_API_URL || 'https://www.specialsms.net/mysmsplus/envoyersms.php';
 const SMS_SPKEY   = process.env.SMS_SPKEY   || '';
@@ -108,7 +109,3 @@ export const tpl = {
   unarciAdhesion: (nom: string, numeroCompte: string, tel: string, pwd: string, montant: number, numeroPaie: string, url: string) =>
     `UNARCI LCP\nBonjour ${nom}!\nAdhesion enregistree.\nCompte: ${numeroCompte}\nTel: ${tel}\nMdp: ${pwd}\nAcces: ${url}\nValidez en payant ${fCFA(montant)} par mobile money au ${numeroPaie}.`,
 };
-
-function fCFA(n: number): string {
-  return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' F';
-}

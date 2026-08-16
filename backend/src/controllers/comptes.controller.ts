@@ -1,9 +1,8 @@
 // backend/src/controllers/comptes.controller.ts
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
-import { generateCodeActeur } from '../utils/crypto';
+import { generateCodeActeur, generateTempPassword } from '../utils/crypto';
 import { sendSms, tpl } from '../utils/sms';
 import { notifier, emailTpl } from '../utils/notifications';
 import { clientAppartientA, ROLES_STAFF } from '../utils/acces';
@@ -20,6 +19,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
     const {
       nom, prenom, email, telephone,
       whatsapp,                           // [NEW] optionnel
+      dateNaissance,                      // [NEW] date de naissance du client
       notifWhatsapp = false,              // [NEW] préférence
       notifEmail    = false,              // [NEW] préférence
       region, ville, departement, commune,
@@ -110,7 +110,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
 
     // ── Nouveau compte ──────────────────────────────────────────────
     const emailFinal     = email || `${telephone.replace(/\D/g,'')}@semence-noemail.ci`;
-    const tempPassword   = `LCP${crypto.randomInt(100000, 1000000)}`;
+    const tempPassword   = generateTempPassword();
     const passwordHash   = await bcrypt.hash(tempPassword, 12);
 
     const newUser = await prisma.user.create({
@@ -118,6 +118,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
         email:         emailFinal,
         telephone,
         whatsapp:      whatsapp || null,
+        dateNaissance: dateNaissance ? new Date(dateNaissance) : null,
         notifWhatsapp: notifWhatsapp && !!whatsapp,
         notifEmail:    notifEmail && !!email,
         passwordHash,
@@ -155,7 +156,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
     return res.status(201).json({
       success: true,
       message: 'Compte créé avec succès.',
-      data:    { userId:newUser.id, codeClient, numeroCompte, rib, telephone, whatsapp:whatsapp||null, tempPassword }
+      data:    { userId:newUser.id, codeClient, numeroCompte, rib, telephone, whatsapp:whatsapp||null, dateNaissance:dateNaissance||null, tempPassword }
     });
   } catch (err: any) {
     if (err.code === 'P2002') { const field = err.meta?.target?.[0]||'champ'; return res.status(409).json({ error:`Ce ${field} est déjà utilisé` }); }

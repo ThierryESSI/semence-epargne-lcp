@@ -8,6 +8,7 @@
 // backend/src/utils/notifications.ts
 // Envoi multi-canal : SMS + WhatsApp + Email
 import { sendSms } from './sms';
+import { fCFA } from './format';
 import prisma from './prisma';
 
 // ── WhatsApp via WhatsApp Business API (Meta) ou Twilio ──────────────
@@ -98,7 +99,7 @@ export async function notifier(payload: NotifPayload) {
 // ── Templates email HTML ──────────────────────────────────────────────
 export const emailTpl = {
   depotSucces: (nom: string, ref: string, montant: number, net: number, solde: number) => ({
-    sujet: `✅ Recharge confirmée — ${formatF(net)}`,
+    sujet: `✅ Recharge confirmée — ${fCFA(net)}`,
     html: `
 <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;border:1px solid #e4ebe5;border-radius:12px;overflow:hidden">
   <div style="background:#1a2e1c;padding:20px;text-align:center">
@@ -110,9 +111,9 @@ export const emailTpl = {
     <p>Votre recharge a été <strong>créditée avec succès</strong> !</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0">
       <tr style="background:#d8f3dc"><td style="padding:8px;font-weight:bold">Réf. transaction</td><td style="padding:8px;font-family:monospace">${ref}</td></tr>
-      <tr><td style="padding:8px">Montant carte</td><td style="padding:8px">${formatF(montant)}</td></tr>
-      <tr style="background:#f4f6f4"><td style="padding:8px">Net crédité</td><td style="padding:8px;font-weight:bold;color:#2d6a4f">${formatF(net)}</td></tr>
-      <tr><td style="padding:8px">Nouveau solde</td><td style="padding:8px;font-weight:900;font-size:18px;color:#2d6a4f">${formatF(solde)}</td></tr>
+      <tr><td style="padding:8px">Montant carte</td><td style="padding:8px">${fCFA(montant)}</td></tr>
+      <tr style="background:#f4f6f4"><td style="padding:8px">Net crédité</td><td style="padding:8px;font-weight:bold;color:#2d6a4f">${fCFA(net)}</td></tr>
+      <tr><td style="padding:8px">Nouveau solde</td><td style="padding:8px;font-weight:900;font-size:18px;color:#2d6a4f">${fCFA(solde)}</td></tr>
     </table>
     <p style="color:#6b7c6d;font-size:12px">Le Crédit Panafricain · +225 27 35 96 05 99 · infos@semenceep.ci</p>
   </div>
@@ -120,7 +121,7 @@ export const emailTpl = {
   }),
 
   virementEnvoye: (nom: string, ref: string, montant: number, destNom: string, solde: number) => ({
-    sujet: `💸 Virement de ${formatF(montant)} effectué`,
+    sujet: `💸 Virement de ${fCFA(montant)} effectué`,
     html: `
 <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;border:1px solid #e4ebe5;border-radius:12px;overflow:hidden">
   <div style="background:#1a2e1c;padding:20px;text-align:center">
@@ -131,16 +132,16 @@ export const emailTpl = {
     <p>Votre virement a été <strong>effectué avec succès</strong>.</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0">
       <tr style="background:#d8f3dc"><td style="padding:8px;font-weight:bold">Réf.</td><td style="padding:8px;font-family:monospace">${ref}</td></tr>
-      <tr><td style="padding:8px">Montant envoyé</td><td style="padding:8px;font-weight:bold;color:#e63946">-${formatF(montant)}</td></tr>
+      <tr><td style="padding:8px">Montant envoyé</td><td style="padding:8px;font-weight:bold;color:#e63946">-${fCFA(montant)}</td></tr>
       <tr style="background:#f4f6f4"><td style="padding:8px">Destinataire</td><td style="padding:8px">${destNom}</td></tr>
-      <tr><td style="padding:8px">Nouveau solde</td><td style="padding:8px;font-weight:900;font-size:18px;color:#2d6a4f">${formatF(solde)}</td></tr>
+      <tr><td style="padding:8px">Nouveau solde</td><td style="padding:8px;font-weight:900;font-size:18px;color:#2d6a4f">${fCFA(solde)}</td></tr>
     </table>
   </div>
 </div>`
   }),
 
   virementRecu: (nom: string, ref: string, montant: number, sourceNom: string, solde: number) => ({
-    sujet: `💸 Vous avez reçu ${formatF(montant)}`,
+    sujet: `💸 Vous avez reçu ${fCFA(montant)}`,
     html: `
 <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;border:1px solid #e4ebe5;border-radius:12px;overflow:hidden">
   <div style="background:#1a2e1c;padding:20px;text-align:center">
@@ -151,9 +152,9 @@ export const emailTpl = {
     <p>Vous avez reçu un virement de <strong>${sourceNom}</strong>.</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0">
       <tr style="background:#d8f3dc"><td style="padding:8px;font-weight:bold">Réf.</td><td style="padding:8px;font-family:monospace">${ref}</td></tr>
-      <tr><td style="padding:8px">Montant reçu</td><td style="padding:8px;font-weight:bold;color:#2d6a4f">+${formatF(montant)}</td></tr>
+      <tr><td style="padding:8px">Montant reçu</td><td style="padding:8px;font-weight:bold;color:#2d6a4f">+${fCFA(montant)}</td></tr>
       <tr style="background:#f4f6f4"><td style="padding:8px">De</td><td style="padding:8px">${sourceNom}</td></tr>
-      <tr><td style="padding:8px">Nouveau solde</td><td style="padding:8px;font-weight:900;font-size:18px;color:#2d6a4f">${formatF(solde)}</td></tr>
+      <tr><td style="padding:8px">Nouveau solde</td><td style="padding:8px;font-weight:900;font-size:18px;color:#2d6a4f">${fCFA(solde)}</td></tr>
     </table>
   </div>
 </div>`
@@ -182,5 +183,3 @@ export const emailTpl = {
 </div>`
   }),
 };
-
-function formatF(n: number) { return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' F'; }

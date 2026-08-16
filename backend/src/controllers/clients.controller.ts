@@ -9,10 +9,11 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { clientAppartientA } from '../utils/acces';
+import { parsePage, parseLimit } from '../utils/format';
 
 export async function listerClients(req: Request, res: Response) {
-  const page   = parseInt(req.query.page as string || '1');
-  const limit  = parseInt(req.query.limit as string || '20');
+  const page   = parsePage(req.query.page as string);
+  const limit  = parseLimit(req.query.limit as string);
   const search = req.query.search as string | undefined;
   const role   = req.user!.role;
 
@@ -43,7 +44,7 @@ export async function listerClients(req: Request, res: Response) {
     prisma.client.findMany({
       where, skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' },
       include: {
-        user: { select: { id: true, nom: true, prenom: true, email: true, telephone: true, actif: true, createdAt: true, compte: { select: { numeroCompte: true, solde: true, statut: true } } } },
+        user: { select: { id: true, nom: true, prenom: true, email: true, telephone: true, dateNaissance: true, actif: true, createdAt: true, compte: { select: { numeroCompte: true, solde: true, statut: true } } } },
         conseiller: { select: { code: true, user: { select: { nom: true } } } }
       }
     })
@@ -55,7 +56,7 @@ export async function getClient(req: Request, res: Response) {
   const client = await prisma.client.findUnique({
     where: { id: req.params.id },
     include: {
-      user: { select: { id: true, nom: true, prenom: true, email: true, telephone: true, actif: true, createdAt: true, compte: { include: { transactions: { orderBy: { createdAt: 'desc' }, take: 10, include: { carte: { select: { reference: true } } } } } } } },
+      user: { select: { id: true, nom: true, prenom: true, email: true, telephone: true, dateNaissance: true, actif: true, createdAt: true, compte: { include: { transactions: { orderBy: { createdAt: 'desc' }, take: 10, include: { carte: { select: { reference: true } } } } } } } },
       conseiller: { include: { user: { select: { nom: true, prenom: true } }, distributeur: { select: { nomEntreprise: true } } } }
     }
   });

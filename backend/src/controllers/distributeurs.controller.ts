@@ -5,9 +5,15 @@ import prisma from '../utils/prisma';
 import { generateCodeActeur } from '../utils/crypto';
 import { Role, TypeDistributeur } from '@prisma/client';
 import { upgradeRole, mergePermissions, PERMISSIONS_DISTRIBUTEUR } from '../utils/roles';
+import { parsePage, parseLimit } from '../utils/format';
 
 export async function creerDistributeur(req: Request, res: Response) {
   try {
+    // [RÈGLE MÉTIER] Seul le MASTER crée les distributeurs
+    const role = req.user!.role;
+    if (role !== 'MASTER' && role !== 'SUPER_ADMIN')
+      return res.status(403).json({ error: 'Seul le MASTER peut créer des distributeurs' });
+
     const { nom, prenom, email, telephone, password, nomEntreprise, ville, pays, type = 'INTERNE', caution, parentDistributeurId } = req.body;
 
     const manquants: string[] = [];
@@ -21,7 +27,7 @@ export async function creerDistributeur(req: Request, res: Response) {
     if (type !== 'INTERNE' && type !== 'AGREE')
       return res.status(400).json({ error: "Type invalide. Valeurs : INTERNE, AGREE" });
 
-    const role: Role = type === 'INTERNE' ? Role.DISTRIBUTEUR_INTERNE : Role.DISTRIBUTEUR_AGREE;
+    const distRole: Role = type === 'INTERNE' ? Role.DISTRIBUTEUR_INTERNE : Role.DISTRIBUTEUR_AGREE;
 
     // Un distributeur (non MASTER) ne crée que ses propres agences.
     // [SÉCURITÉ] On ignore totalement le parentDistributeurId fourni par le
@@ -57,7 +63,7 @@ export async function creerDistributeur(req: Request, res: Response) {
 
       await prisma.user.update({
         where: { id: user.id },
-        data: { role: upgradeRole(user.role, role) as Role, permissions: mergePermissions(user.permissions as string[], PERMISSIONS_DISTRIBUTEUR) as any }
+        data: { role: upgradeRole(user.role, distRole) as Role, permissions: mergePermissions(user.permissions as string[], PERMISSIONS_DISTRIBUTEUR) as any }
       });
       await prisma.distributeur.create({
         data: { code, type: type as TypeDistributeur, nomEntreprise: nomEntreprise.trim(), pays: pays || 'CI', ville: ville.trim(), caution: cautionNum, parentDistributeurId: parentId, userId: user.id }
@@ -84,7 +90,7 @@ export async function creerDistributeur(req: Request, res: Response) {
         passwordHash: await bcrypt.hash(password, 12),
         nom: nom.toUpperCase().trim(),
         prenom: (prenom || '-').trim(),
-        role, actif: true,
+        role: distRole, actif: true,
         permissions: PERMISSIONS_DISTRIBUTEUR as any,
       }
     });
@@ -116,8 +122,8 @@ export async function creerDistributeur(req: Request, res: Response) {
 }
 
 export async function listerDistributeurs(req: Request, res: Response) {
-  const page   = parseInt(req.query.page as string || '1');
-  const limit  = parseInt(req.query.limit as string || '20');
+  const page   = parsePage(req.query.page as string);
+  const limit  = parseLimit(req.query.limit as string);
   const search = (req.query.search as string || '').trim();
 
   const where: any = {};

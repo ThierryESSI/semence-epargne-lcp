@@ -6,8 +6,7 @@ import { uploadToCloudinary } from '../utils/upload';
 import { notifier, emailTpl } from '../utils/notifications';
 import PDFDocument from 'pdfkit';
 import * as XLSX from 'xlsx';
-
-function fmt(n: number) { return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' F'; }
+import { fCFA } from '../utils/format';
 
 // Générer un rapport PDF mensuel
 export async function genererRapportMensuel(req: Request, res: Response) {
@@ -57,10 +56,10 @@ export async function genererRapportMensuel(req: Request, res: Response) {
       doc.moveDown(0.5);
       const kpis = [
         ['Nouveaux clients',    clients.toString()],
-        ['Total depots cartes', fmt(totalDepots)],
-        ['Total frais collectes',fmt(totalFrais)],
-        ['Virements internes',  fmt(totalVirements)],
-        ['Bonus epargne verses',fmt(totalBonus)],
+        ['Total depots cartes', fCFA(totalDepots)],
+        ['Total frais collectes',fCFA(totalFrais)],
+        ['Virements internes',  fCFA(totalVirements)],
+        ['Bonus epargne verses',fCFA(totalBonus)],
         ['Plans bonifies',      plansBonifies.toString()],
       ];
       kpis.forEach(([k,v]) => {
@@ -93,9 +92,9 @@ export async function genererRapportMensuel(req: Request, res: Response) {
         doc.text(new Date(t.createdAt).toLocaleDateString('fr-CI'), 50,  yRow, {width:80});
         doc.text(`${t.compte.user.prenom} ${t.compte.user.nom}`.slice(0,18), 130, yRow, {width:110});
         doc.text(t.type.replace(/_/g,' '),    240, yRow, {width:80});
-        doc.text(fmt(Number(t.montant)),       320, yRow, {width:70});
-        doc.text(fmt(Number(t.montantNet)),    390, yRow, {width:70});
-        doc.text(fmt(Number(t.frais)),         460, yRow, {width:60});
+        doc.text(fCFA(Number(t.montant)),       320, yRow, {width:70});
+        doc.text(fCFA(Number(t.montantNet)),    390, yRow, {width:70});
+        doc.text(fCFA(Number(t.frais)),         460, yRow, {width:60});
         doc.moveDown(1.2);
       });
 
@@ -137,9 +136,9 @@ export async function genererRapportMensuel(req: Request, res: Response) {
           <p>Le rapport mensuel <strong>${periode}</strong> est disponible.</p>
           <ul>
             <li>Nouveaux clients : <strong>${clients}</strong></li>
-            <li>Total depots : <strong>${fmt(totalDepots)}</strong></li>
-            <li>Total frais : <strong>${fmt(totalFrais)}</strong></li>
-            <li>Virements : <strong>${fmt(totalVirements)}</strong></li>
+            <li>Total depots : <strong>${fCFA(totalDepots)}</strong></li>
+            <li>Total frais : <strong>${fCFA(totalFrais)}</strong></li>
+            <li>Virements : <strong>${fCFA(totalVirements)}</strong></li>
           </ul>
           <a href="${url}" style="background:#F65A04;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Telecharger le PDF</a>
           <p style="color:#5a7a9a;font-size:12px;margin-top:20px">SEMENCE EPARGNE · semenceep.ci</p>

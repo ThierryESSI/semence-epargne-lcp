@@ -140,7 +140,7 @@ export async function creerAdmin(req: Request, res: Response) {
       data: { email, telephone, passwordHash:hash, nom:nom.toUpperCase().trim(), prenom:prenom.trim(), role:role as Role, actif:true, permissions:permissions as Permission[], creePar:req.user!.userId }
     });
     await prisma.auditLog.create({ data: { action:'CREATION_ADMIN', entite:'User', entiteId:user.id, actorId:req.user!.userId, details:{ role, permissions, email } } });
-    return res.status(201).json({ success:true, message:`Compte ${role} cree`, data:{ userId:user.id, email, telephone, role, permissions, motDePasseTemporaire:pwd } });
+    return res.status(201).json({ success:true, message:`Compte ${role} cree`, data:{ userId:user.id, email, telephone, role, permissions } });
   } catch(err:any) { return res.status(500).json({ error: err.message }); }
 }
 
@@ -194,7 +194,7 @@ export async function resetPasswordAdmin(req: Request, res: Response) {
     const newHash = await bcrypt.hash(newPwd, 12);
     await prisma.user.update({ where: { id: userId }, data: { passwordHash:newHash, refreshToken:null } });
     await prisma.auditLog.create({ data: { action:'RESET_PASSWORD_ADMIN', entite:'User', entiteId:userId, actorId:req.user!.userId } });
-    return res.json({ success:true, message:'Mot de passe reinitialise', motDePasseTemporaire:newPwd });
+    return res.json({ success:true, message:'Mot de passe reinitialise. Un email avec le nouveau mot de passe sera envoyé.' });
   } catch(err:any) { return res.status(500).json({ error: err.message }); }
 }
 

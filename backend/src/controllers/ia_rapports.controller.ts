@@ -3,16 +3,13 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import Anthropic from '@anthropic-ai/sdk';
+import { fCFA } from '../utils/format';
 
 // [CORRECTION] Client instancié paresseusement : si ANTHROPIC_API_KEY est
 // absente au démarrage (dev/test), le serveur ne crashe pas à l'import.
 function clientIA(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY manquante');
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-}
-
-function fmt(n: number) {
-  return new Intl.NumberFormat('fr-CI').format(Math.round(n)) + ' FCFA';
 }
 
 // Message clair pour les erreurs Anthropic courantes (billing, clé, rate-limit)
@@ -103,11 +100,11 @@ export async function genererAnalyseIA(req: Request, res: Response) {
 
 DONNEES :
 - Clients : ${donnees.clients.total} total, ${donnees.clients.nouveaux} nouveaux ce mois, ${donnees.clients.actifs} actifs
-- Transactions : ${donnees.transactions.nombre} operations, ${donnees.transactions.depots.nombre} depots cartes (${fmt(donnees.transactions.depots.total)}), ${donnees.transactions.rechargesSMS} recharges SMS zone rurale
-- Frais collectes : ${fmt(donnees.transactions.fraisCollectes)}
-- Virements LCP : ${donnees.transactions.virements.nombre} virements (${fmt(donnees.transactions.virements.total)})
-- Epargne : ${donnees.epargne.plansActifs} plans actifs, ${donnees.epargne.plansBonifies} plans bonifies ce mois, ${fmt(donnees.epargne.totalBonus)} de bonus verses
-- Solde total plateforme : ${fmt(donnees.financier.soldeTotal)}
+- Transactions : ${donnees.transactions.nombre} operations, ${donnees.transactions.depots.nombre} depots cartes (${fCFA(donnees.transactions.depots.total)}), ${donnees.transactions.rechargesSMS} recharges SMS zone rurale
+- Frais collectes : ${fCFA(donnees.transactions.fraisCollectes)}
+- Virements LCP : ${donnees.transactions.virements.nombre} virements (${fCFA(donnees.transactions.virements.total)})
+- Epargne : ${donnees.epargne.plansActifs} plans actifs, ${donnees.epargne.plansBonifies} plans bonifies ce mois, ${fCFA(donnees.epargne.totalBonus)} de bonus verses
+- Solde total plateforme : ${fCFA(donnees.financier.soldeTotal)}
 - Top conseillers : ${donnees.conseillers.map(c => `${c.nom} (${c.nombreClients} clients)`).join(', ')}
 
 Fournis une analyse structuree en francais avec :

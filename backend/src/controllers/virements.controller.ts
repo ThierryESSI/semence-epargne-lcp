@@ -6,9 +6,9 @@ import { sendSms } from '../utils/sms';
 import { notifier, emailTpl } from '../utils/notifications';
 import { generateRef, hashCode, verifyHashedCode } from '../utils/crypto';
 import { codeAutorise, codeEchec, codeSucces } from '../utils/rateLimits';
+import { fCFA, parsePage, parseLimit } from '../utils/format';
 
 function genOTP() { return crypto.randomInt(100000, 1000000).toString(); }
-function fmt(n: number) { return new Intl.NumberFormat('fr-CI').format(n) + ' F'; }
 
 function validerMontant(montant: any): number | null {
   const n = Number(montant);
@@ -33,7 +33,7 @@ export async function initierVirement(req: Request, res: Response) {
     if (!compteSource) return res.status(404).json({ error:'Compte introuvable' });
     if (compteSource.statut !== 'ACTIF') return res.status(403).json({ error:'Votre compte n\'est pas actif' });
     if (Number(compteSource.solde) < montantNum)
-      return res.status(400).json({ error:`Solde insuffisant. Votre solde : ${fmt(Number(compteSource.solde))}` });
+      return res.status(400).json({ error:`Solde insuffisant. Votre solde : ${fCFA(Number(compteSource.solde))}` });
 
     const compteDest = await prisma.compte.findUnique({
       where:   { rib:ribDest.trim().toUpperCase() },
@@ -51,7 +51,7 @@ export async function initierVirement(req: Request, res: Response) {
     });
 
     // SMS OTP
-    sendSms({ to:compteSource.user.telephone, message:`SEMENCE EPARGNE LCP: Code confirmation virement: ${otp}. Valable 10 min. Virement de ${fmt(montantNum)} vers ${compteDest.user.prenom} ${compteDest.user.nom}. Ne communiquez jamais ce code.`, userId:req.user!.userId }).catch(() => {});
+    sendSms({ to:compteSource.user.telephone, message:`SEMENCE EPARGNE LCP: Code confirmation virement: ${otp}. Valable 10 min. Virement de ${fCFA(montantNum)} vers ${compteDest.user.prenom} ${compteDest.user.nom}. Ne communiquez jamais ce code.`, userId:req.user!.userId }).catch(() => {});
 
     return res.status(201).json({
       success: true,
@@ -107,7 +107,7 @@ export async function confirmerVirement(req: Request, res: Response) {
         // Re-vérification du solde dans la transaction (données à jour)
         const source = await tx.compte.findUnique({ where:{ id:virement.compteSourceId }, select:{ solde:true } });
         if (!source || Number(source.solde) < montant) {
-          throw new ErreurVirement(`Solde insuffisant. Solde : ${fmt(Number(source?.solde || 0))}`);
+          throw new ErreurVirement(`Solde insuffisant. Solde : ${fCFA(Number(source?.solde || 0))}`);
         }
 
         await tx.compte.update({ where:{ id:virement.compteSourceId }, data:{ solde:{ decrement:montant } } });
@@ -135,13 +135,13 @@ export async function confirmerVirement(req: Request, res: Response) {
     const dst = virement.compteDest.user;
     const tplSrc = emailTpl.virementEnvoye(`${src.prenom} ${src.nom}`, virement.reference, montant, `${dst.prenom} ${dst.nom}`, soldeNouveau);
     notifier({ userId:src.id, telephone:src.telephone, whatsapp:src.whatsapp, email:src.email, notifWhatsapp:src.notifWhatsapp, notifEmail:src.notifEmail,
-      messageSms:`LCP SEMENCE: Virement de ${fmt(montant)} effectué vers ${dst.prenom} ${dst.nom}. Nouveau solde: ${fmt(soldeNouveau)}.`,
+      messageSms:`LCP SEMENCE: Virement de ${fCFA(montant)} effectué vers ${dst.prenom} ${dst.nom}. Nouveau solde: ${fCFA(soldeNouveau)}.`,
       sujetEmail:tplSrc.sujet, htmlEmail:tplSrc.html }).catch(() => {});
 
     // Notif destinataire
     const tplDst = emailTpl.virementRecu(`${dst.prenom} ${dst.nom}`, virement.reference, montant, `${src.prenom} ${src.nom}`, soldeDest);
     notifier({ userId:dst.id, telephone:dst.telephone, whatsapp:dst.whatsapp, email:dst.email, notifWhatsapp:dst.notifWhatsapp, notifEmail:dst.notifEmail,
-      messageSms:`LCP SEMENCE: Reçu ${fmt(montant)} de ${src.prenom} ${src.nom}. Motif: ${virement.motif||'Virement LCP'}.`,
+      messageSms:`LCP SEMENCE: Reçu ${fCFA(montant)} de ${src.prenom} ${src.nom}. Motif: ${virement.motif||'Virement LCP'}.`,
       sujetEmail:tplDst.sujet, htmlEmail:tplDst.html }).catch(() => {});
 
     return res.json({ success:true, message:'Virement effectué !', data:{ reference:virement.reference, montant, motif:virement.motif, soldeNouveau, destinataire:{ nom:dst.nom, prenom:dst.prenom, compte:virement.compteDest.numeroCompte } } });
@@ -172,8 +172,8 @@ export async function mesVirements(req: Request, res: Response) {
   try {
     const compte = await prisma.compte.findUnique({ where:{ userId:req.user!.userId } });
     if (!compte) return res.status(404).json({ error:'Compte introuvable' });
-    const page  = Math.max(1, parseInt(req.query.page as string||'1'));
-    const limit = parseInt(req.query.limit as string||'20');
+    const page  = parsePage(req.query.page as string);
+    const limit = parseLimit(req.query.limit as string);
     const [total, virements] = await Promise.all([
       prisma.virement.count({ where:{ OR:[{ compteSourceId:compte.id },{ compteDestId:compte.id }] } }),
       prisma.virement.findMany({ where:{ OR:[{ compteSourceId:compte.id },{ compteDestId:compte.id }] }, skip:(page-1)*limit, take:limit, orderBy:{ createdAt:'desc' }, include:{ compteSource:{ include:{ user:{ select:{ nom:true, prenom:true } } } }, compteDest:{ include:{ user:{ select:{ nom:true, prenom:true } } } } } })
@@ -195,8 +195,8 @@ export async function rechercherParRib(req: Request, res: Response) {
 
 export async function tousLesVirements(req: Request, res: Response) {
   try {
-    const page   = Math.max(1, parseInt(req.query.page as string||'1'));
-    const limit  = parseInt(req.query.limit as string||'20');
+    const page   = parsePage(req.query.page as string);
+    const limit  = parseLimit(req.query.limit as string);
     const statut = req.query.statut as string|undefined;
     const where: any = {};
     if (statut) where.statut = statut;

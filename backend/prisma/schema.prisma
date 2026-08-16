@@ -7,7 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 enum Role {
   SUPER_ADMIN
   MASTER
@@ -16,18 +15,21 @@ enum Role {
   CONSEILLER
   CLIENT
 }
+
 enum StatutCompte {
   EN_ATTENTE
   ACTIF
   SUSPENDU
   CLOTURE
 }
+
 enum TypeCompte {
   ORDINAIRE
   INVEST_ENTREPRISE
   INVEST_ORDINAIRE
   CARTE_MAGNETIQUE
 }
+
 enum StatutCarte {
   DISPONIBLE
   VENDUE
@@ -35,12 +37,14 @@ enum StatutCarte {
   UTILISEE
   ANNULEE
 }
+
 enum StatutTransaction {
   EN_COURS
   SUCCES
   ECHEC
   ANNULEE
 }
+
 enum TypeTransaction {
   DEPOT_CARTE
   TRANSFERT
@@ -50,30 +54,39 @@ enum TypeTransaction {
   BONUS_EPARGNE
   VIREMENT_LCP
 }
+
 enum CanalNotification {
   SMS
   WHATSAPP
   EMAIL
   IN_APP
 }
+
 enum StatutNotification {
   EN_ATTENTE
   ENVOYE
   ECHEC
 }
+
 enum TypeDistributeur {
   INTERNE
   AGREE
 }
+
 enum TypeConseiller {
   STAND
   MOBILE
+  AGENT_CAISSE
+  CHEF_AGENCE
+  CHARGE_COMPTE
 }
+
 enum PalierBonus {
   TROIS_MOIS
   SIX_MOIS
   DOUZE_MOIS
 }
+
 enum StatutEpargne {
   EN_COURS
   ELIGIBLE
@@ -81,12 +94,14 @@ enum StatutEpargne {
   INTERROMPU
   EXPIRE
 }
+
 enum StatutVirement {
   EN_ATTENTE
   VALIDE
   REJETE
   ANNULE
 }
+
 enum StatutAdhesion {
   INSCRIT
   ACTIF
@@ -146,25 +161,26 @@ enum Permission {
 }
 
 model User {
-  id              String       @id @default(cuid())
-  email           String       @unique
-  telephone       String       @unique
+  id              String           @id @default(cuid())
+  email           String           @unique
+  telephone       String           @unique
   whatsapp        String?
-  notifEmail      Boolean      @default(false)
-  notifWhatsapp   Boolean      @default(false)
+  notifEmail      Boolean          @default(false)
+  notifWhatsapp   Boolean          @default(false)
   passwordHash    String
   nom             String
   prenom          String
+  dateNaissance   DateTime?
   role            Role
-  actif           Boolean      @default(false)
+  actif           Boolean          @default(false)
   permissions     Permission[]
   cniRecto        String?
   cniVerso        String?
   photoFaciale    String?
   empreinteHash   String?
   refreshToken    String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   lastLoginAt     DateTime?
   creePar         String?
   compte          Compte?
@@ -175,27 +191,29 @@ model User {
   auditLogs       AuditLog[]
   notifications   Notification[]
   documents       Document[]
-  chatEnvoyes     ChatMessage[] @relation("ChatExpedites")
-  chatRecus       ChatMessage[] @relation("ChatClient")
+  chatEnvoyes     ChatMessage[]    @relation("ChatExpedites")
+  chatRecus       ChatMessage[]    @relation("ChatClient")
+
   @@map("users")
 }
 
 model Compte {
-  id           String       @id @default(cuid())
-  numeroCompte String       @unique
-  rib          String       @unique
-  solde        Decimal      @default(0) @db.Decimal(15,2)
-  type         TypeCompte   @default(ORDINAIRE)
-  statut       StatutCompte @default(EN_ATTENTE)
-  devise       String       @default("XOF")
-  userId       String       @unique
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  user         User         @relation(fields:[userId],references:[id])
-  transactions Transaction[]
-  plansEpargne PlanEpargne[]
-  virementsEmis  Virement[] @relation("VirementSource")
-  virementsRecus Virement[] @relation("VirementDest")
+  id             String        @id @default(cuid())
+  numeroCompte   String        @unique
+  rib            String        @unique
+  solde          Decimal       @default(0) @db.Decimal(15, 2)
+  type           TypeCompte    @default(ORDINAIRE)
+  statut         StatutCompte  @default(EN_ATTENTE)
+  devise         String        @default("XOF")
+  userId         String        @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  user           User          @relation(fields: [userId], references: [id])
+  transactions   Transaction[]
+  plansEpargne   PlanEpargne[]
+  virementsEmis  Virement[]    @relation("VirementSource")
+  virementsRecus Virement[]    @relation("VirementDest")
+
   @@map("comptes")
 }
 
@@ -211,36 +229,38 @@ model Distributeur {
   ville                String
   userId               String
   parentDistributeurId String?
-  caution              Decimal?         @db.Decimal(15,2)
+  caution              Decimal?         @db.Decimal(15, 2)
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
-  user                 User             @relation(fields:[userId],references:[id])
+  user                 User             @relation(fields: [userId], references: [id])
   conseillers          Conseiller[]
   cartes               Carte[]
   adherentsUnarci      AdherentUnarci[]
-  parentDistributeur   Distributeur?    @relation("DistributeurAgences",fields:[parentDistributeurId],references:[id])
+  parentDistributeur   Distributeur?    @relation("DistributeurAgences", fields: [parentDistributeurId], references: [id])
   agences              Distributeur[]   @relation("DistributeurAgences")
+
   @@map("distributeurs")
 }
 
 model Conseiller {
-  id             String         @id @default(cuid())
-  code           String         @unique
-  type           TypeConseiller @default(STAND)
-  region         String?
-  departement    String?
-  commune        String?
-  codeStand      String?
-  distributeurId String
-  userId         String
-  caution        Decimal?       @db.Decimal(15,2)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  user           User           @relation(fields:[userId],references:[id])
-  distributeur   Distributeur   @relation(fields:[distributeurId],references:[id])
-  clients        Client[]
+  id              String           @id @default(cuid())
+  code            String           @unique
+  type            TypeConseiller   @default(STAND)
+  region          String?
+  departement     String?
+  commune         String?
+  codeStand       String?
+  distributeurId  String
+  userId          String
+  caution         Decimal?         @db.Decimal(15, 2)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  user            User             @relation(fields: [userId], references: [id])
+  distributeur    Distributeur     @relation(fields: [distributeurId], references: [id])
+  clients         Client[]
   adherentsUnarci AdherentUnarci[]
-  cartesVendues  Carte[]
+  cartesVendues   Carte[]
+
   @@map("conseillers")
 }
 
@@ -254,8 +274,9 @@ model Client {
   userId       String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-  user         User       @relation(fields:[userId],references:[id])
-  conseiller   Conseiller @relation(fields:[conseillerId],references:[id])
+  user         User       @relation(fields: [userId], references: [id])
+  conseiller   Conseiller @relation(fields: [conseillerId], references: [id])
+
   @@map("clients")
 }
 
@@ -264,142 +285,146 @@ model Client {
 // l'agence UNARCI, reçoit un SMS avec le numéro de paie LCP, puis le
 // conseiller valide le paiement manuellement (statut -> ACTIF).
 model AdherentUnarci {
-  id                     String         @id @default(cuid())
-  reference              String         @unique
-  statut                 StatutAdhesion @default(INSCRIT)
-  montantAdhesion        Decimal        @default(10000) @db.Decimal(15,2)
-  numeroPaie             String?
-  smsEnvoye              Boolean        @default(false)
-  activateAt             DateTime?
-  rejeteAt               DateTime?
+  id              String         @id @default(cuid())
+  reference       String         @unique
+  statut          StatutAdhesion @default(INSCRIT)
+  montantAdhesion Decimal        @default(10000) @db.Decimal(15, 2)
+  numeroPaie      String?
+  smsEnvoye       Boolean        @default(false)
+  activateAt      DateTime?
+  rejeteAt        DateTime?
 
   // Localisation
-  pays                   String         @default("CI")
-  region                 String
-  ville                  String
-  village                String?
-  campement              String?
+  pays      String  @default("CI")
+  region    String
+  ville     String
+  village   String?
+  campement String?
 
   // Etat civil
-  nomComplet             String
-  nomPere                String?
-  nomMere                String?
-  numeroCni              String?
-  numeroPasseport        String?
-  numeroPermis           String?
+  nomComplet      String
+  nomPere         String?
+  nomMere         String?
+  numeroCni       String?
+  numeroPasseport String?
+  numeroPermis    String?
 
   // Situation matrimoniale
-  situation              String? // MARIEE | CELIBATAIRE
-  nomConjoint            String?
-  naissanceConjoint      String?
-  nombreEnfantsCharge    Int            @default(0)
-  nomAyantDroit          String?
-  naissanceAyantDroit    String?
+  situation           String? // MARIEE | CELIBATAIRE
+  nomConjoint         String?
+  naissanceConjoint   String?
+  nombreEnfantsCharge Int     @default(0)
+  nomAyantDroit       String?
+  naissanceAyantDroit String?
 
   // Vie professionnelle
-  nomArtiste             String?
-  debutCarriere          String?
-  corpsMetier            String?
+  nomArtiste    String?
+  debutCarriere String?
+  corpsMetier   String?
 
   // Personne morale
-  typeStructure          String? // GROUPE | ASSOCIATION
-  nomStructure           String?
-  representantLegal      String?
-  dateCreationStructure  String?
-  specialites            String?
+  typeStructure         String? // GROUPE | ASSOCIATION
+  nomStructure          String?
+  representantLegal     String?
+  dateCreationStructure String?
+  specialites           String?
 
   // Personne à contacter en cas d'urgence
-  urgenceNom             String?
-  urgenceContacts        String?
-  urgenceFiliation       String?
+  urgenceNom       String?
+  urgenceContacts  String?
+  urgenceFiliation String?
 
   // Pièces jointes (upload Cloudinary)
-  photoUrl              String?
-  photoPublicId         String?
-  pieceRectoUrl         String?
-  pieceRectoPublicId    String?
-  pieceVersoUrl         String?
-  pieceVersoPublicId    String?
+  photoUrl           String?
+  photoPublicId      String?
+  pieceRectoUrl      String?
+  pieceRectoPublicId String?
+  pieceVersoUrl      String?
+  pieceVersoPublicId String?
 
   // Vérification des pièces par l'agence (EN_ATTENTE | CONFORMES | A_REVOIR)
-  piecesStatut          String         @default("EN_ATTENTE")
-  piecesMotif           String?
-  piecesVerifieesAt     DateTime?
+  piecesStatut      String    @default("EN_ATTENTE")
+  piecesMotif       String?
+  piecesVerifieesAt DateTime?
 
   // Relances paiement en attente (48h puis 7 jours)
-  relanceCount          Int            @default(0)
-  relanceAt             DateTime?
+  relanceCount Int       @default(0)
+  relanceAt    DateTime?
 
-  userId                 String
-  distributeurId         String
-  conseillerId           String
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  userId         String
+  distributeurId String
+  conseillerId   String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  user                   User           @relation(fields:[userId],references:[id])
-  distributeur           Distributeur   @relation(fields:[distributeurId],references:[id])
-  conseiller             Conseiller     @relation(fields:[conseillerId],references:[id])
+  user         User         @relation(fields: [userId], references: [id])
+  distributeur Distributeur @relation(fields: [distributeurId], references: [id])
+  conseiller   Conseiller   @relation(fields: [conseillerId], references: [id])
+
   @@map("adherents_unarci")
 }
 
 model Carte {
-  id             String      @id @default(cuid())
-  reference      String      @unique
-  refCourt       String?     @unique
-  montant        Decimal     @db.Decimal(10,2)
-  qrCodeAuth     String      @db.Text
-  qrCodeEpargne  String      @db.Text
-  codeValidation String
-  statut         StatutCarte @default(DISPONIBLE)
-  activationLock   Boolean   @default(false)
+  id               String        @id @default(cuid())
+  reference        String        @unique
+  refCourt         String?       @unique
+  montant          Decimal       @db.Decimal(10, 2)
+  qrCodeAuth       String        @db.Text
+  qrCodeEpargne    String        @db.Text
+  codeValidation   String
+  statut           StatutCarte   @default(DISPONIBLE)
+  activationLock   Boolean       @default(false)
   activationLockAt DateTime?
-  distributeurId String?
-  conseillerId   String?
-  usedAt         DateTime?
-  usedByCompteId String?
-  lotId          String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  distributeur   Distributeur? @relation(fields:[distributeurId],references:[id])
-  conseiller     Conseiller?   @relation(fields:[conseillerId],references:[id])
-  transaction    Transaction?
-  lot            LotCarte?     @relation(fields:[lotId],references:[id])
+  distributeurId   String?
+  conseillerId     String?
+  usedAt           DateTime?
+  usedByCompteId   String?
+  lotId            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  distributeur     Distributeur? @relation(fields: [distributeurId], references: [id])
+  conseiller       Conseiller?   @relation(fields: [conseillerId], references: [id])
+  transaction      Transaction?
+  lot              LotCarte?     @relation(fields: [lotId], references: [id])
+
   @@map("cartes")
 }
 
 model LotCarte {
-  id              String   @id @default(cuid())
-  reference       String   @unique
-  montant         Decimal  @db.Decimal(10,2)
-  quantite        Int
-  statut          String   @default("ACTIF")   // ACTIF | GRILLE
-  distributeurId  String?
-  creePar         String?
-  grillePar       String?
-  grilleAt        DateTime?
-  motif           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  cartes          Carte[]
+  id             String    @id @default(cuid())
+  reference      String    @unique
+  montant        Decimal   @db.Decimal(10, 2)
+  quantite       Int
+  statut         String    @default("ACTIF") // ACTIF | GRILLE
+  distributeurId String?
+  creePar        String?
+  grillePar      String?
+  grilleAt       DateTime?
+  motif          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  cartes         Carte[]
+
   @@map("lots_cartes")
 }
 
 model Transaction {
-  id          String             @id @default(cuid())
-  reference   String             @unique
+  id          String            @id @default(cuid())
+  reference   String            @unique
   type        TypeTransaction
-  montant     Decimal            @db.Decimal(15,2)
-  frais       Decimal            @default(0) @db.Decimal(15,2)
-  montantNet  Decimal            @db.Decimal(15,2)
-  statut      StatutTransaction  @default(EN_COURS)
+  montant     Decimal           @db.Decimal(15, 2)
+  frais       Decimal           @default(0) @db.Decimal(15, 2)
+  montantNet  Decimal           @db.Decimal(15, 2)
+  statut      StatutTransaction @default(EN_COURS)
   compteId    String
-  carteId     String?            @unique
+  carteId     String?           @unique
   description String?
   metadata    Json?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  compte      Compte             @relation(fields:[compteId],references:[id])
-  carte       Carte?             @relation(fields:[carteId],references:[id])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  compte      Compte            @relation(fields: [compteId], references: [id])
+  carte       Carte?            @relation(fields: [carteId], references: [id])
+
   @@map("transactions")
 }
 
@@ -408,7 +433,7 @@ model Virement {
   reference      String         @unique
   compteSourceId String
   compteDestId   String
-  montant        Decimal        @db.Decimal(15,2)
+  montant        Decimal        @db.Decimal(15, 2)
   motif          String?
   statut         StatutVirement @default(EN_ATTENTE)
   codeConfirm    String?
@@ -416,8 +441,9 @@ model Virement {
   traiteLe       DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
-  compteSource   Compte         @relation("VirementSource",fields:[compteSourceId],references:[id])
-  compteDest     Compte         @relation("VirementDest",fields:[compteDestId],references:[id])
+  compteSource   Compte         @relation("VirementSource", fields: [compteSourceId], references: [id])
+  compteDest     Compte         @relation("VirementDest", fields: [compteDestId], references: [id])
+
   @@map("virements")
 }
 
@@ -432,7 +458,8 @@ model Notification {
   tentatives    Int                @default(0)
   envoyeAt      DateTime?
   createdAt     DateTime           @default(now())
-  user          User?              @relation(fields:[userId],references:[id])
+  user          User?              @relation(fields: [userId], references: [id])
+
   @@map("notifications")
 }
 
@@ -445,7 +472,8 @@ model AuditLog {
   details   Json?
   ipAddress String?
   createdAt DateTime @default(now())
-  actor     User     @relation(fields:[actorId],references:[id])
+  actor     User     @relation(fields: [actorId], references: [id])
+
   @@map("audit_logs")
 }
 
@@ -454,29 +482,31 @@ model Config {
   cle       String   @unique
   valeur    String
   updatedAt DateTime @updatedAt
+
   @@map("config")
 }
 
 model PlanEpargne {
-  id                    String        @id @default(cuid())
+  id                    String             @id @default(cuid())
   compteId              String
   palier                PalierBonus
-  statut                StatutEpargne @default(EN_COURS)
-  dateDebut             DateTime      @default(now())
+  statut                StatutEpargne      @default(EN_COURS)
+  dateDebut             DateTime           @default(now())
   dateEcheance          DateTime
   dateDernierRetrait    DateTime?
-  soldeDepart           Decimal       @db.Decimal(15,2)
-  soldeActuel           Decimal       @db.Decimal(15,2)
-  bonusTaux             Decimal       @db.Decimal(5,4)
-  bonusMontant          Decimal?      @db.Decimal(15,2)
-  bonusVerse            Boolean       @default(false)
+  soldeDepart           Decimal            @db.Decimal(15, 2)
+  soldeActuel           Decimal            @db.Decimal(15, 2)
+  bonusTaux             Decimal            @db.Decimal(5, 4)
+  bonusMontant          Decimal?           @db.Decimal(15, 2)
+  bonusVerse            Boolean            @default(false)
   nbVersementsRequis    Int
-  nbVersementsEffectues Int           @default(0)
-  montantTotalVerse     Decimal       @db.Decimal(15,2) @default(0)
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  compte                Compte        @relation(fields:[compteId],references:[id])
+  nbVersementsEffectues Int                @default(0)
+  montantTotalVerse     Decimal            @default(0) @db.Decimal(15, 2)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  compte                Compte             @relation(fields: [compteId], references: [id])
   versements            VersementEpargne[]
+
   @@map("plans_epargne")
 }
 
@@ -484,49 +514,53 @@ model VersementEpargne {
   id              String      @id @default(cuid())
   planId          String
   transactionId   String?     @unique
-  montant         Decimal     @db.Decimal(15,2)
+  montant         Decimal     @db.Decimal(15, 2)
   dateVersement   DateTime    @default(now())
   numeroVersement Int
-  plan            PlanEpargne @relation(fields:[planId],references:[id])
+  plan            PlanEpargne @relation(fields: [planId], references: [id])
+
   @@map("versements_epargne")
 }
 
 // ─── Documents clients (CNI, photo) — stockage Cloudinary ──────────
 model Document {
-  id          String   @id @default(cuid())
-  userId      String
-  type        String   // CNI_RECTO, CNI_VERSO, PHOTO_FACIALE, AUTRE
-  url         String   // URL Cloudinary
-  publicId    String   // ID Cloudinary pour suppression
-  taille      Int?     // Taille en bytes
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields:[userId],references:[id])
+  id        String   @id @default(cuid())
+  userId    String
+  type      String // CNI_RECTO, CNI_VERSO, PHOTO_FACIALE, AUTRE
+  url       String // URL Cloudinary
+  publicId  String // ID Cloudinary pour suppression
+  taille    Int? // Taille en bytes
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
   @@map("documents")
 }
 
 // ─── Configuration du site public (éditable par SuperAdmin) ────────
 model SiteConfig {
-  id          String   @id @default(cuid())
-  cle         String   @unique
-  valeur      String   @db.Text
-  type        String   @default("TEXT")  // TEXT, IMAGE, BOOLEAN, JSON
-  label       String   // Label affiché dans l'interface admin
-  updatedAt   DateTime @updatedAt
-  updatedBy   String?
+  id        String   @id @default(cuid())
+  cle       String   @unique
+  valeur    String   @db.Text
+  type      String   @default("TEXT") // TEXT, IMAGE, BOOLEAN, JSON
+  label     String // Label affiché dans l'interface admin
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
   @@map("site_config")
 }
 
 // ─── Rapport PDF planifié ────────────────────────────────────────────
 model RapportPDF {
-  id          String   @id @default(cuid())
-  type        String   // MENSUEL, HEBDOMADAIRE, ANNUEL
-  periode     String   // "2026-07" pour juillet 2026
-  url         String?  // URL Cloudinary du PDF généré
-  publicId    String?
-  statut      String   @default("EN_COURS")
-  genereAt    DateTime?
-  envoye      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id        String    @id @default(cuid())
+  type      String // MENSUEL, HEBDOMADAIRE, ANNUEL
+  periode   String // "2026-07" pour juillet 2026
+  url       String? // URL Cloudinary du PDF généré
+  publicId  String?
+  statut    String    @default("EN_COURS")
+  genereAt  DateTime?
+  envoye    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
   @@unique([periode, type])
   @@map("rapports_pdf")
 }
@@ -539,7 +573,8 @@ model ChatMessage {
   contenu      String   @db.Text
   lu           Boolean  @default(false)
   createdAt    DateTime @default(now())
-  expediteur   User     @relation("ChatExpedites", fields:[expediteurId], references:[id])
-  client       User     @relation("ChatClient", fields:[clientId], references:[id])
+  expediteur   User     @relation("ChatExpedites", fields: [expediteurId], references: [id])
+  client       User     @relation("ChatClient", fields: [clientId], references: [id])
+
   @@map("chat_messages")
 }
