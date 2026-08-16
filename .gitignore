@@ -27,8 +27,7 @@ npm-debug.log*
 # TypeScript cache
 *.tsbuildinfo
 
-# Prisma
-backend/prisma/migrations/
+# Prisma migrations are tracked in git
 
 # Uploads
 backend/uploads/

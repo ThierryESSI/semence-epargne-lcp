@@ -1,0 +1,4 @@
+-- Baseline migration
+-- The database schema already exists (created via prisma db push).
+-- This empty migration establishes the migration history baseline.
+-- Future changes should use `npx prisma migrate dev` to generate proper diffs.
