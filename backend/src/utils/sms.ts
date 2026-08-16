@@ -1,5 +1,6 @@
 // backend/src/utils/sms.ts — SpecialSMS (specialsms.net)
 // © 2024-2026 MaGestion Facile — M. Thierry ESSI
+import prisma from './prisma';
 import { fCFA } from './format';
 
 const SMS_API_URL = process.env.SMS_API_URL || 'https://www.specialsms.net/mysmsplus/envoyersms.php';
@@ -77,19 +78,47 @@ export async function sendSmsBulk(destinataires: string[], message: string) {
   return { succes, echecs };
 }
 
-// Templates SMS
+// Templates SMS avec variables configurables via SiteConfig
+// Les templates lus en base remplacent les placeholders {var} par les valeurs.
+// Si aucun template n'est configuré en base, le template par défaut est utilisé.
+
+type TemplateVars = Record<string, string | number>;
+
+function appliquerTemplate(cle: string, defaut: string, vars: TemplateVars): string {
+  // Le template est chargé en lazy (1 appel par cycle de vie, cache léger)
+  if (!(globalThis as any).__smsTplCache) (globalThis as any).__smsTplCache = {} as Record<string, string | null>;
+  const cache = (globalThis as any).__smsTplCache as Record<string, string | null>;
+
+  if (!(cle in cache)) {
+    cache[cle] = null;
+    // Lecture synchrone via prisma raw pour éviter un async dans les templates
+    prisma.siteConfig.findUnique({ where:{ cle } }).then(cfg => {
+      if (cfg?.valeur) cache[cle] = cfg.valeur;
+    }).catch(() => {});
+  }
+
+  const tpl = cache[cle] || defaut;
+  return Object.entries(vars).reduce((msg, [k, v]) => msg.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)), tpl);
+}
+
 export const tpl = {
   compteOuvert: (nom: string, num: string, tel: string, pwd: string, url: string) =>
-    `SEMENCE EPARGNE LCP\nBonjour ${nom}!\nCompte: ${num}\nTel: ${tel}\nMdp: ${pwd}\nAcces: ${url}`,
+    appliquerTemplate('SMS_TPL_COMPTE_OUVERT',
+      `SEMENCE EPARGNE LCP\nBonjour ${nom}!\nCompte: ${num}\nTel: ${tel}\nMdp: ${pwd}\nAcces: ${url}`,
+      { nom, numero: num, tel, pwd, url }),
 
   compteActive: (nom: string) =>
-    `SEMENCE EPARGNE: Bonjour ${nom}, votre compte est actif. Bonne epargne!`,
+    appliquerTemplate('SMS_TPL_COMPTE_ACTIF',
+      `SEMENCE EPARGNE: Bonjour ${nom}, votre compte est actif. Bonne epargne!`,
+      { nom }),
 
   compteClientAjoute: (nom: string, codeClient: string, numeroCompte: string) =>
     `SEMENCE EPARGNE LCP\nBonjour ${nom}!\nVotre compte ${numeroCompte} est desormais actif en tant que CLIENT (${codeClient}).\nConnectez-vous avec votre numero habituel.`,
 
   depotSucces: (montant: number, frais: number, solde: number) =>
-    `SEMENCE EPARGNE: Depot ${fCFA(montant)}. Frais: ${fCFA(frais)}. Solde: ${fCFA(solde)}.`,
+    appliquerTemplate('SMS_TPL_DEPOT_OK',
+      `SEMENCE EPARGNE: Depot ${fCFA(montant)}. Frais: ${fCFA(frais)}. Solde: ${fCFA(solde)}.`,
+      { montant: fCFA(montant), frais: fCFA(frais), solde: fCFA(solde) }),
 
   depotEchec: (raison: string) =>
     `SEMENCE EPARGNE: Echec transaction. ${raison}. Contactez votre conseiller.`,
@@ -101,11 +130,17 @@ export const tpl = {
     `SEMENCE EPARGNE: Connexion detectee le ${heure}. Si ce n'est pas vous, appelez +225 27 35 96 05 99.`,
 
   bonusVerse: (nom: string, taux: string, bonus: number, solde: number) =>
-    `SEMENCE EPARGNE: Felicitations ${nom}! Bonus ${taux} verse: +${fCFA(bonus)}. Solde: ${fCFA(solde)}.`,
+    appliquerTemplate('SMS_TPL_BONUS',
+      `SEMENCE EPARGNE: Felicitations ${nom}! Bonus ${taux} verse: +${fCFA(bonus)}. Solde: ${fCFA(solde)}.`,
+      { nom, taux, bonus: fCFA(bonus), solde: fCFA(solde) }),
 
   planActive: (nom: string, palier: string, taux: string, echeance: string, nbVers: number) =>
-    `SEMENCE EPARGNE: Plan ${palier} active! Bonus ${taux} le ${echeance}. Minimum ${nbVers} versements sans retrait.`,
+    appliquerTemplate('SMS_TPL_PLAN',
+      `SEMENCE EPARGNE: Plan ${palier} active! Bonus ${taux} le ${echeance}. Minimum ${nbVers} versements sans retrait.`,
+      { nom, palier, taux, echeance, nbVers }),
 
   unarciAdhesion: (nom: string, numeroCompte: string, tel: string, pwd: string, montant: number, numeroPaie: string, url: string) =>
-    `UNARCI LCP\nBonjour ${nom}!\nAdhesion enregistree.\nCompte: ${numeroCompte}\nTel: ${tel}\nMdp: ${pwd}\nAcces: ${url}\nValidez en payant ${fCFA(montant)} par mobile money au ${numeroPaie}.`,
+    appliquerTemplate('SMS_TPL_ADHESION',
+      `UNARCI LCP\nBonjour ${nom}!\nAdhesion enregistree.\nCompte: ${numeroCompte}\nTel: ${tel}\nMdp: ${pwd}\nAcces: ${url}\nValidez en payant ${fCFA(montant)} par mobile money au ${numeroPaie}.`,
+      { nom, prenom: nom.split(' ')[0], numeroCompte, tel, pwd, montant: fCFA(montant), numeroPaie, url }),
 };

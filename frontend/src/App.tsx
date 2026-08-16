@@ -31,6 +31,7 @@ const Chat       = lazy(() => import('./pages/admin/Chat'));
 const Galerie    = lazy(() => import('./pages/admin/Galerie'));
 const ClientChat = lazy(() => import('./pages/client/ClientChat'));
 const UnarciAgency = lazy(() => import('./pages/admin/UnarciAgency'));
+const RechargesSMS = lazy(() => import('./pages/admin/RechargesSMS'));
 
 const ROLE_HOME: Record<string,string> = {
   SUPER_ADMIN:'/admin', MASTER:'/admin',
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="galerie"       element={<Protected roles={['SUPER_ADMIN','MASTER']}><Galerie /></Protected>} />
           <Route path="admins"        element={<Protected roles={['SUPER_ADMIN','MASTER']}><GestionAdmins /></Protected>} />
           <Route path="unarci"        element={<Protected roles={['SUPER_ADMIN','MASTER','DISTRIBUTEUR_AGREE','DISTRIBUTEUR_INTERNE']}><UnarciAgency /></Protected>} />
+          <Route path="recharges-sms"  element={<Protected roles={['SUPER_ADMIN','MASTER']}><RechargesSMS /></Protected>} />
           <Route path="offline"       element={<OfflinePage />} />
         </Route>
 

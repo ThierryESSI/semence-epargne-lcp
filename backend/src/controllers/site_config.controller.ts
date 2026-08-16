@@ -28,6 +28,12 @@ const CONFIGS_DEFAUT = [
   { cle:'NUMERO_SMS_LCP',   valeur:'',      type:'TEXT',    label:'Numero SMS zone rurale (ex: 0712345678)' },
   { cle:'ALERTE_RECHARGE_TEL', valeur:'',   type:'TEXT',    label:'Numero alerte recharges SMS/WhatsApp (ex: 0708249583)' },
   { cle:'GALERIE_ACTIVE',   valeur:'false', type:'BOOLEAN', label:'Activer la galerie sur le site' },
+  { cle:'SMS_TPL_ADHESION', valeur:'',      type:'TEXTAREA', label:'Template SMS adhésion UNARCI ({nom},{prenom},{numeroCompte},{tel},{pwd},{montant},{numeroPaie},{url})' },
+  { cle:'SMS_TPL_COMPTE_OUVERT', valeur:'', type:'TEXTAREA', label:'Template SMS compte ouvert ({nom},{numero},{tel},{pwd},{url})' },
+  { cle:'SMS_TPL_COMPTE_ACTIF', valeur:'',  type:'TEXTAREA', label:'Template SMS compte activé ({nom})' },
+  { cle:'SMS_TPL_DEPOT_OK',  valeur:'',      type:'TEXTAREA', label:'Template SMS dépôt réussi ({montant},{frais},{solde})' },
+  { cle:'SMS_TPL_BONUS',     valeur:'',      type:'TEXTAREA', label:'Template SMS bonus versé ({nom},{taux},{bonus},{solde})' },
+  { cle:'SMS_TPL_PLAN',      valeur:'',      type:'TEXTAREA', label:'Template SMS plan activé ({nom},{palier},{taux},{echeance},{nbVers})' },
 ];
 
 // [SÉCURITÉ] Whitelist des clés exposées publiquement (page d'accueil).

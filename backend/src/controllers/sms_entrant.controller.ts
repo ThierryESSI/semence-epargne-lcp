@@ -249,7 +249,7 @@ export async function historiqueRechargesSMS(req: Request, res: Response) {
     const limit = parseInt(req.query.limit as string || '20');
     const [total, logs] = await Promise.all([
       prisma.auditLog.count({ where:{ action:{ startsWith:'SMS_RECHARGE' } } }),
-      prisma.auditLog.findMany({ where:{ action:{ startsWith:'SMS_RECHARGE' } }, orderBy:{ createdAt:'desc' }, skip:(page-1)*limit, take:limit }),
+      prisma.auditLog.findMany({ where:{ action:{ startsWith:'SMS_RECHARGE' } }, orderBy:{ createdAt:'desc' }, skip:(page-1)*limit, take:limit, include:{ actor:{ select:{ id:true, nom:true, prenom:true, telephone:true } } } }),
     ]);
     return res.json({ data:logs, pagination:{ total, page, limit, pages:Math.ceil(total/limit) } });
   } catch (err:any) { return res.status(500).json({ error:err.message }); }

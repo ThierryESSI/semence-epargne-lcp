@@ -15,6 +15,7 @@ const GROUPES: Record<string, string[]> = {
   'Notifications':          ['NOTIF_WHATSAPP_ACTIVE','NOTIF_EMAIL_ACTIVE'],
   'Systeme':                ['MAINTENANCE_MODE'],
   'Canal SMS zone rurale':  ['NUMERO_SMS_LCP','ALERTE_RECHARGE_TEL'],
+  'Templates SMS':          ['SMS_TPL_ADHESION','SMS_TPL_COMPTE_OUVERT','SMS_TPL_COMPTE_ACTIF','SMS_TPL_DEPOT_OK','SMS_TPL_BONUS','SMS_TPL_PLAN'],
   'Galerie photos':         ['GALERIE_ACTIVE'],
 };
 
@@ -118,9 +119,10 @@ export default function Parametres() {
                           <input value={vals[cfg.cle]||''} onChange={e => setVals(v => ({ ...v, [cfg.cle]: e.target.value }))}
                             style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, outline:'none', fontFamily:'monospace' }}/>
                         </div>
-                      ) : cfg.cle === 'SITE_DESCRIPTION' ? (
+                      ) : cfg.cle === 'SITE_DESCRIPTION' || cfg.cle.startsWith('SMS_TPL_') ? (
                         <textarea value={vals[cfg.cle]||''} onChange={e => setVals(v => ({ ...v, [cfg.cle]: e.target.value }))}
-                          rows={3} style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, outline:'none', fontFamily:'inherit', resize:'vertical', boxSizing:'border-box' }}/>
+                          rows={cfg.cle.startsWith('SMS_TPL_') ? 3 : 3} placeholder={cfg.cle.startsWith('SMS_TPL_') ? 'Laisser vide pour le template par défaut' : ''}
+                          style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, outline:'none', fontFamily:'monospace', resize:'vertical', boxSizing:'border-box' }}/>
                       ) : (
                         <input value={vals[cfg.cle]||''} onChange={e => setVals(v => ({ ...v, [cfg.cle]: e.target.value }))}
                           style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}/>

@@ -464,6 +464,60 @@ export async function statsAdherents(req: Request, res: Response) {
   } catch (err:any) { return res.status(500).json({ error:err.message }); }
 }
 
+// ─── SUPER_ADMIN : modifier un adhérent (statut, données, pièces) ─────
+export async function modifierAdherent(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const role = req.user!.role;
+    if (role !== 'SUPER_ADMIN' && role !== 'MASTER')
+      return res.status(403).json({ error:'Réservé au SUPER_ADMIN / MASTER' });
+
+    const adhesion = await prisma.adherentUnarci.findUnique({ where:{ id } });
+    if (!adhesion) return res.status(404).json({ error:'Adhésion introuvable' });
+
+    const { statut, motif, nomComplet, region, ville, village, campement,
+            numeroCni, numeroPasseport, numeroPermis, situation,
+            nomConjoint, nombreEnfantsCharge, nomArtiste, corpsMetier,
+            urgenceNom, urgenceContacts, numeroPaie, montantAdhesion } = req.body;
+
+    const updateData: any = {};
+    if (statut && ['INSCRIT','ACTIF','REJETE'].includes(statut)) {
+      updateData.statut = statut;
+      if (statut === 'ACTIF') updateData.activateAt = new Date();
+      if (statut === 'REJETE') updateData.rejeteAt = new Date();
+    }
+    if (motif !== undefined)     updateData.piecesMotif = String(motif).trim().slice(0,300) || null;
+    if (nomComplet !== undefined) updateData.nomComplet = String(nomComplet).trim();
+    if (region !== undefined)     updateData.region = String(region).trim();
+    if (ville !== undefined)      updateData.ville = String(ville).trim();
+    if (village !== undefined)    updateData.village = String(village).trim() || null;
+    if (campement !== undefined)  updateData.campement = String(campement).trim() || null;
+    if (numeroCni !== undefined)      updateData.numeroCni = String(numeroCni).trim().toUpperCase() || null;
+    if (numeroPasseport !== undefined) updateData.numeroPasseport = String(numeroPasseport).trim().toUpperCase() || null;
+    if (numeroPermis !== undefined)    updateData.numeroPermis = String(numeroPermis).trim().toUpperCase() || null;
+    if (situation !== undefined)       updateData.situation = String(situation).trim() || null;
+    if (nomConjoint !== undefined)     updateData.nomConjoint = String(nomConjoint).trim() || null;
+    if (nombreEnfantsCharge !== undefined) updateData.nombreEnfantsCharge = parseInt(nombreEnfantsCharge) || 0;
+    if (nomArtiste !== undefined)      updateData.nomArtiste = String(nomArtiste).trim() || null;
+    if (corpsMetier !== undefined)     updateData.corpsMetier = String(corpsMetier).trim() || null;
+    if (urgenceNom !== undefined)      updateData.urgenceNom = String(urgenceNom).trim() || null;
+    if (urgenceContacts !== undefined) updateData.urgenceContacts = String(urgenceContacts).trim() || null;
+    if (numeroPaie !== undefined)      updateData.numeroPaie = String(numeroPaie).trim();
+    if (montantAdhesion !== undefined) updateData.montantAdhesion = parseInt(montantAdhesion) || adhesion.montantAdhesion;
+
+    if (Object.keys(updateData).length === 0)
+      return res.status(400).json({ error:'Aucun champ à modifier fourni' });
+
+    const updated = await prisma.adherentUnarci.update({ where:{ id }, data: updateData });
+
+    await prisma.auditLog.create({
+      data:{ action:'MODIFICATION_ADHESION_UNARCI', entite:'AdherentUnarci', entiteId:id, actorId:req.user!.userId, details:{ reference:adhesion.reference, champs: Object.keys(updateData) } },
+    }).catch(() => {});
+
+    return res.json({ success:true, data:{ id:updated.id, reference:updated.reference, statut:updated.statut } });
+  } catch(err:any) { return res.status(500).json({ error:err.message }); }
+}
+
 // ─── AGENCE : vérification des pièces jointes (conformes / à revoir) ──
 export async function validerPieces(req: Request, res: Response) {
   try {
