@@ -21,6 +21,7 @@ export default function ClientDashboard() {
   const [transactions, setTx]       = useState<any[]>([]);
   const [planActif, setPlanActif]   = useState<any>(null);
   const [loading, setLoading]       = useState(true);
+  const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -32,10 +33,19 @@ export default function ClientDashboard() {
       setTx(t.data.data || []);
       const plans = e.data.data || [];
       setPlanActif(plans.find((p: any) => p.statut === 'EN_COURS') || null);
+    }).catch(() => {
+      setFetchError('Impossible de charger les données. Vérifiez votre connexion.');
     }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spinner />;
+
+  if (fetchError) return (
+    <div style={{ textAlign:'center', padding:40 }}>
+      <p style={{ color:C.red, fontSize:15, fontWeight:600 }}>{fetchError}</p>
+      <button onClick={()=>window.location.reload()} style={{ marginTop:12, background:C.primary, color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontWeight:600, cursor:'pointer' }}>Réessayer</button>
+    </div>
+  );
 
   const actions = [
     { label:'Virement',       sub:'Envoyer des fonds',       path:'/client/virement',      bg:C.green     },

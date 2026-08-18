@@ -87,20 +87,25 @@ export async function sendSmsBulk(destinataires: string[], message: string) {
 
 type TemplateVars = Record<string, string | number>;
 
-function appliquerTemplate(cle: string, defaut: string, vars: TemplateVars): string {
-  // Le template est chargé en lazy (1 appel par cycle de vie, cache léger)
-  if (!(globalThis as any).__smsTplCache) (globalThis as any).__smsTplCache = {} as Record<string, string | null>;
-  const cache = (globalThis as any).__smsTplCache as Record<string, string | null>;
+// Cache avec TTL de 5 minutes (évite la lecture DB à chaque SMS)
+const TPL_CACHE_TTL_MS = 5 * 60 * 1000;
+interface TplCacheEntry { value: string | null; loadedAt: number; }
 
-  if (!(cle in cache)) {
-    cache[cle] = null;
-    // Lecture synchrone via prisma raw pour éviter un async dans les templates
+function appliquerTemplate(cle: string, defaut: string, vars: TemplateVars): string {
+  if (!(globalThis as any).__smsTplCache) (globalThis as any).__smsTplCache = {} as Record<string, TplCacheEntry>;
+  const cache = (globalThis as any).__smsTplCache as Record<string, TplCacheEntry>;
+
+  const entry = cache[cle];
+  const now = Date.now();
+  // Recharger si absent ou TTL expiré
+  if (!entry || (now - entry.loadedAt) > TPL_CACHE_TTL_MS) {
+    cache[cle] = { value: null, loadedAt: now };
     prisma.siteConfig.findUnique({ where:{ cle } }).then(cfg => {
-      if (cfg?.valeur) cache[cle] = cfg.valeur;
+      if (cfg?.valeur) cache[cle].value = cfg.valeur;
     }).catch(() => {});
   }
 
-  const tpl = cache[cle] || defaut;
+  const tpl = (entry?.value) || defaut;
   return Object.entries(vars).reduce((msg, [k, v]) => msg.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)), tpl);
 }
 

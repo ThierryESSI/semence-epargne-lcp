@@ -17,6 +17,7 @@ export default function ClientRapports() {
   const [compte, setCompte] = useState<any>(null);
   const [txData, setTxData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -25,10 +26,21 @@ export default function ClientRapports() {
     ]).then(([c, t]) => {
       setCompte(c.data.data);
       setTxData(t.data.data || []);
+    }).catch(() => {
+      setFetchError('Impossible de charger les données. Vérifiez votre connexion.');
     }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Spinner />;
+
+  if (fetchError) return (
+    <div>
+      <PageHeader title="Mes Rapports" subtitle="Récapitulatif de votre épargne" />
+      <div style={{ textAlign:'center', padding:40 }}>
+        <p style={{ color:C.red, fontSize:15, fontWeight:600 }}>{fetchError}</p>
+      </div>
+    </div>
+  );
 
   const totalEpargne = txData.filter(t => t.statut === 'SUCCES').reduce((s, t) => s + Number(t.montantNet || 0), 0);
   const totalFrais   = txData.filter(t => t.statut === 'SUCCES').reduce((s, t) => s + Number(t.frais || 0), 0);

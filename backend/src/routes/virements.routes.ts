@@ -18,7 +18,7 @@ router.post('/initier',               authorize('CLIENT'), initierVirement);
 router.post('/confirmer',             authorize('CLIENT'), confirmerVirement);
 router.delete('/:virementId/annuler', authorize('CLIENT'), annulerVirement);
 router.get('/mes-virements',          authorize('CLIENT'), mesVirements);
-router.get('/rib/:rib',               rechercherParRib);
+router.get('/rib/:rib',               authorize('CLIENT'), rechercherParRib);
 
 // ADMIN
 router.get('/admin/tous', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE'), tousLesVirements);

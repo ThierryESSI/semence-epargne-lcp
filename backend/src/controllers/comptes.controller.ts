@@ -125,7 +125,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
         nom:           nom.toUpperCase().trim(),
         prenom:        prenom.trim(),
         role:          Role.CLIENT,
-        actif:         false,
+        actif:         true,
       }
     });
 

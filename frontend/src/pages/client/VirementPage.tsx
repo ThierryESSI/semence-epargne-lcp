@@ -68,7 +68,7 @@ export default function VirementPage() {
 
   function reset() {
     setStep('form'); setRib(''); setMontant(''); setMotif(''); setDestInfo(null);
-    setVirementId(''); setOtp(''); setError(''); setSuccess(null);
+    setVirementId(''); setVirRef(''); setOtp(''); setError(''); setSuccess(null);
   }
 
   const montantNum = parseFloat(montant) || 0;

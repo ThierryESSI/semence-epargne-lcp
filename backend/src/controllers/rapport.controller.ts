@@ -13,7 +13,7 @@ export async function genererRapportMensuel(req: Request, res: Response) {
   try {
     const { annee, mois } = req.body;
     const a = parseInt(annee || new Date().getFullYear().toString());
-    const m = parseInt(mois  || new Date().getMonth().toString()) || new Date().getMonth();
+    const m = parseInt(mois || (new Date().getMonth() + 1).toString()) || (new Date().getMonth() + 1);
     const periode = `${a}-${String(m).padStart(2,'0')}`;
     const debut = new Date(a, m-1, 1);
     const fin   = new Date(a, m,   1);

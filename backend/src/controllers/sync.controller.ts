@@ -138,7 +138,14 @@ async function syncDepotCarte(op: OfflineOp, actorId: string, actorRole: string)
     return { id: op.id, type: op.type, success: false, message: '', error: 'Code de validation incorrect' };
   }
 
-  const compte = await prisma.compte.findUnique({ where: { userId: actorId } });
+  // [FIX] Le dépôt offline doit créditer le compte du CLIENT (propriétaire de la carte),
+  // pas le compte de l'acteur (conseiller/distributeur qui synchronise).
+  // Le QR code contient le userId du client propriétaire via payload.userId.
+  const clientUserId = payload.userId;
+  if (!clientUserId) {
+    return { id: op.id, type: op.type, success: false, message: '', error: 'QR Code ne contient pas d\'identifiant client' };
+  }
+  const compte = await prisma.compte.findUnique({ where: { userId: clientUserId } });
   if (!compte || compte.statut !== 'ACTIF') {
     return { id: op.id, type: op.type, success: false, message: '', error: 'Compte inactif ou introuvable' };
   }
@@ -180,8 +187,8 @@ async function syncDepotCarte(op: OfflineOp, actorId: string, actorRole: string)
   });
 
   const updated = await prisma.compte.findUnique({ where: { id: compte.id } });
-  const user    = await prisma.user.findUnique({ where: { id: actorId }, select: { telephone: true } });
-  if (user) sendSms({ to: user.telephone, message: tpl.depotSucces(mnt, frais, Number(updated?.solde)), userId: actorId, transactionId: transaction.id }).catch(() => {});
+  const user    = await prisma.user.findUnique({ where: { id: clientUserId }, select: { telephone: true } });
+  if (user) sendSms({ to: user.telephone, message: tpl.depotSucces(mnt, frais, Number(updated?.solde)), userId: clientUserId, transactionId: transaction.id }).catch(() => {});
 
   return {
     id: op.id, type: op.type, success: true,
@@ -221,7 +228,7 @@ async function syncOuvertureCompte(op: OfflineOp, actorId: string, actorRole: st
   const passwordHash = await bcrypt.hash(password, 12);
 
   const user = await prisma.user.create({
-    data: { email, telephone, passwordHash, nom: nom.toUpperCase(), prenom, role: 'CLIENT', actif: false }
+    data: { email, telephone, passwordHash, nom: nom.toUpperCase(), prenom, role: 'CLIENT', actif: true }
   });
 
   const codeClient   = generateCodeActeur('CLI');
@@ -236,7 +243,7 @@ async function syncOuvertureCompte(op: OfflineOp, actorId: string, actorRole: st
   });
 
   const appUrl = process.env.FRONTEND_URL || 'https://app.semenceep.ci';
-  sendSms({ to: telephone, message: tpl.compteOuvert(`${prenom} ${nom}`, numeroCompte, telephone, password, appUrl), userId: user.id }).catch(() => {});
+  sendSms({ to: telephone, message: tpl.compteOuvert(`${prenom} ${nom}`, numeroCompte, telephone, password, `${appUrl}/client`), userId: user.id }).catch(() => {});
 
   return { id: op.id, type: op.type, success: true, message: 'Compte synchronisé avec succès', data: { userId: user.id, codeClient, numeroCompte } };
 }

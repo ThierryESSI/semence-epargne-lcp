@@ -9,7 +9,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
-import { signAccessToken, signRefreshToken, verifyToken } from '../utils/jwt';
+import { signAccessToken, signRefreshToken, verifyToken, verifyRefreshToken } from '../utils/jwt';
 import { codeAutorise, codeEchec, codeSucces } from '../utils/rateLimits';
 
 // [SÉCURITÉ] Garde anti-brute-force : max 5 échecs / 15 min par IP sur login/refresh
@@ -62,7 +62,7 @@ export async function refreshToken(req: Request, res: Response) {
   const cle = `refresh:${req.ip}`;
   if (!verifier(cle))
     return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
-  const payload = verifyToken(token);
+  const payload = verifyRefreshToken(token);
   if (!payload) {
     echec(cle);
     return res.status(401).json({ error: 'Refresh token invalide ou expiré' });

@@ -65,7 +65,10 @@ export async function initierVirement(req: Request, res: Response) {
         destinataire: { rib:ribDest, nom:compteDest.user.nom, prenom:compteDest.user.prenom, compte:compteDest.numeroCompte }
       }
     });
-  } catch(err:any) { return res.status(500).json({ error:err.message }); }
+  } catch(err:any) {
+    console.error('[initierVirement]', err.message);
+    return res.status(500).json({ error:'Erreur lors de l\'initiation du virement' });
+  }
 }
 
 export async function confirmerVirement(req: Request, res: Response) {
@@ -145,7 +148,10 @@ export async function confirmerVirement(req: Request, res: Response) {
       sujetEmail:tplDst.sujet, htmlEmail:tplDst.html }).catch(() => {});
 
     return res.json({ success:true, message:'Virement effectué !', data:{ reference:virement.reference, montant, motif:virement.motif, soldeNouveau, destinataire:{ nom:dst.nom, prenom:dst.prenom, compte:virement.compteDest.numeroCompte } } });
-  } catch(err:any) { return res.status(500).json({ error:err.message }); }
+  } catch(err:any) {
+    console.error('[confirmerVirement]', err.message);
+    return res.status(500).json({ error:'Erreur lors de la confirmation du virement' });
+  }
 }
 
 export async function annulerVirement(req: Request, res: Response) {
@@ -165,7 +171,10 @@ export async function annulerVirement(req: Request, res: Response) {
     });
     if (maj.count !== 1) return res.status(409).json({ error:'Ce virement ne peut plus être annulé' });
     return res.json({ success:true, message:'Virement annulé' });
-  } catch(err:any) { return res.status(500).json({ error:err.message }); }
+  } catch(err:any) {
+    console.error('[annulerVirement]', err.message);
+    return res.status(500).json({ error:'Erreur lors de l\'annulation' });
+  }
 }
 
 export async function mesVirements(req: Request, res: Response) {

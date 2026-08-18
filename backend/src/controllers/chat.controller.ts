@@ -2,14 +2,22 @@
 // © 2024-2026 MaGestion Facile — M. Thierry ESSI
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
+import { clientAppartientA } from '../utils/acces';
 
 export async function getMessages(req: Request, res: Response) {
   try {
     const { clientId } = req.params;
     const userId = req.user!.userId;
     const role   = req.user!.role;
+    // [SÉCURITÉ] Un client ne peut écrire que dans SA conversation.
+    // Un conseiller/distributeur ne peut accéder qu'aux conversations de SON réseau.
     if (role === 'CLIENT' && userId !== clientId) {
       return res.status(403).json({ error: 'Acces refuse' });
+    }
+    if (role !== 'CLIENT' && role !== 'MASTER' && role !== 'SUPER_ADMIN') {
+      if (!(await clientAppartientA(clientId, role, userId))) {
+        return res.status(403).json({ error: 'Acces refuse : ce client ne depend pas de votre reseau' });
+      }
     }
     // 100 messages les plus récents, retournés en ordre chronologique pour l'affichage
     const messages = await prisma.chatMessage.findMany({
@@ -30,9 +38,15 @@ export async function envoyerMessage(req: Request, res: Response) {
     const { clientId } = req.params;
     const { contenu }  = req.body;
     if (!contenu?.trim()) return res.status(400).json({ error: 'Message vide' });
-    // [SÉCURITÉ] Un client ne peut écrire que dans SA conversation
+    // [SÉCURITÉ] Un client ne peut écrire que dans SA conversation.
+    // Un conseiller/distributeur ne peut écrire qu'aux conversations de SON réseau.
     if (req.user!.role === 'CLIENT' && req.user!.userId !== clientId) {
       return res.status(403).json({ error: 'Acces refuse' });
+    }
+    if (req.user!.role !== 'CLIENT' && req.user!.role !== 'MASTER' && req.user!.role !== 'SUPER_ADMIN') {
+      if (!(await clientAppartientA(clientId, req.user!.role, req.user!.userId))) {
+        return res.status(403).json({ error: 'Acces refuse : ce client ne depend pas de votre reseau' });
+      }
     }
     const message = await prisma.chatMessage.create({
       data: { clientId, expediteurId: req.user!.userId, contenu: contenu.trim(), lu: false },
