@@ -21,13 +21,13 @@ export async function listerClients(req: Request, res: Response) {
 
   if (role === 'CONSEILLER') {
     const c = await prisma.conseiller.findFirst({ where: { userId: req.user!.userId } });
-    if (c) where.conseillerId = c.id;
+    if (!c) return res.status(403).json({ error: 'Profil conseiller introuvable' });
+    where.conseillerId = c.id;
   } else if (role === 'DISTRIBUTEUR_INTERNE' || role === 'DISTRIBUTEUR_AGREE') {
     const d = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId } });
-    if (d) {
-      const conseillers = await prisma.conseiller.findMany({ where: { distributeurId: d.id }, select: { id: true } });
-      where.conseillerId = { in: conseillers.map(c => c.id) };
-    }
+    if (!d) return res.status(403).json({ error: 'Profil distributeur introuvable' });
+    const conseillers = await prisma.conseiller.findMany({ where: { distributeurId: d.id }, select: { id: true } });
+    where.conseillerId = { in: conseillers.map(c => c.id) };
   }
 
   if (search) {

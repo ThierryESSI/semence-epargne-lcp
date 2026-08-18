@@ -384,8 +384,13 @@ export async function supprimerUserExpert(req: Request, res: Response) {
 }
 
 // Vide TOUS les clients (fiches + comptes utilisateurs orphelins de rôle CLIENT)
+// [SÉCURITÉ] Requiert un token de confirmation pour éviter les suppressions accidentelles
 export async function viderClients(req: Request, res: Response) {
   try {
+    const { confirmation } = req.body;
+    if (confirmation !== 'SUPPRIMER_TOUT')
+      return res.status(400).json({ error: 'Confirmation requise : envoyer { confirmation: "SUPPRIMER_TOUT" }' });
+
     const users = await prisma.user.findMany({ where: { role: 'CLIENT' }, select: { id: true, email: true } });
     let supprimes = 0;
     for (const u of users) {

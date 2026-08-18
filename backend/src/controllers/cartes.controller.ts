@@ -34,19 +34,26 @@ export async function emettreCartes(req: Request, res: Response) {
     data: { reference: lotReference, montant: montantNum, quantite, distributeurId: distributeurId || null, creePar: req.user!.userId },
   });
 
+  // [SÉCURITÉ] Transaction atomique : si échec mid-batch, le lot est annulé
   const cartes = [];
-  for (let i = 0; i < quantite; i++) {
-    const reference      = generateRef('CARTE');
-    const refCourt       = await genRefCourtUnique();
-    const codeValidation = generateCode4();
-    const codeHash       = hashCode(codeValidation);
-    const carte = await prisma.carte.create({
-      data: { reference, refCourt, montant: montantNum, qrCodeAuth:'', qrCodeEpargne:'', codeValidation:codeHash, distributeurId: distributeurId || null, lotId: lotRecord.id }
-    });
-    const { token: qrAuthToken, image: qrAuthImg }       = await generateQrAuth(carte.id, reference);
-    const { token: qrEpargneToken, image: qrEpargneImg } = await generateQrEpargne(carte.id, montantNum, reference);
-    await prisma.carte.update({ where:{ id:carte.id }, data:{ qrCodeAuth:qrAuthToken, qrCodeEpargne:qrEpargneToken } });
-    cartes.push({ id:carte.id, reference, refCourt, montant:montantNum, codeValidation, qrAuthImage:qrAuthImg, qrEpargneImage:qrEpargneImg });
+  try {
+    for (let i = 0; i < quantite; i++) {
+      const reference      = generateRef('CARTE');
+      const refCourt       = await genRefCourtUnique();
+      const codeValidation = generateCode4();
+      const codeHash       = hashCode(codeValidation);
+      const carte = await prisma.carte.create({
+        data: { reference, refCourt, montant: montantNum, qrCodeAuth:'', qrCodeEpargne:'', codeValidation:codeHash, distributeurId: distributeurId || null, lotId: lotRecord.id }
+      });
+      const { token: qrAuthToken, image: qrAuthImg }       = await generateQrAuth(carte.id, reference);
+      const { token: qrEpargneToken, image: qrEpargneImg } = await generateQrEpargne(carte.id, montantNum, reference);
+      await prisma.carte.update({ where:{ id:carte.id }, data:{ qrCodeAuth:qrAuthToken, qrCodeEpargne:qrEpargneToken } });
+      cartes.push({ id:carte.id, reference, refCourt, montant:montantNum, codeValidation, qrAuthImage:qrAuthImg, qrEpargneImage:qrEpargneImg });
+    }
+  } catch (err) {
+    // Annuler le lot si échec mid-batch
+    await prisma.lotCarte.delete({ where:{ id:lotRecord.id } }).catch(() => {});
+    throw err;
   }
   await prisma.auditLog.create({ data:{ action:'EMISSION_CARTES', entite:'Carte', entiteId:lotRecord.id, actorId:req.user!.userId, details:{ lot:lotReference, montant:montantNum, quantite, distributeurId } } });
   return res.status(201).json({ success:true, data:cartes, lot:{ id:lotRecord.id, reference:lotReference, montant:montantNum, quantite } });
@@ -220,7 +227,7 @@ export async function activerCarte(req: Request, res: Response) {
     // En cas d'erreur : libérer le verrou
     await prisma.carte.updateMany({ where:{ id:payload.carteId, statut:'EN_COURS_ACTIVATION' }, data:{ activationLock:false, activationLockAt:null, statut:'VENDUE' } }).catch(() => {});
     console.error('[activerCarte]', err);
-    return res.status(500).json({ error:`Erreur lors de l'activation : ${err.message}` });
+    return res.status(500).json({ error:'Erreur lors de l\'activation de la carte' });
   }
 }
 
@@ -276,10 +283,12 @@ export async function listerCartes(req: Request, res: Response) {
   if (lot)    where.lotId  = lot;
   if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
     const d = await prisma.distributeur.findFirst({ where:{ userId:req.user!.userId } });
-    if (d) where.distributeurId = d.id;
+    if (!d) return res.status(403).json({ error: 'Profil distributeur introuvable' });
+    where.distributeurId = d.id;
   } else if (req.user!.role === 'CONSEILLER') {
     const c = await prisma.conseiller.findFirst({ where:{ userId:req.user!.userId } });
-    if (c) where.conseillerId = c.id;
+    if (!c) return res.status(403).json({ error: 'Profil conseiller introuvable' });
+    where.conseillerId = c.id;
   }
   const [total, cartes] = await Promise.all([
     prisma.carte.count({ where }),

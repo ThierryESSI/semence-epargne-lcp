@@ -57,6 +57,9 @@ export async function ajouterPhoto(req: Request, res: Response) {
 export async function modifierPhoto(req: Request, res: Response) {
   try {
     const { cle } = req.params;
+    // [SÉCURITÉ] Seules les clés galerie sont modifiables via ce endpoint
+    if (!cle.startsWith('GALERIE_PHOTO_'))
+      return res.status(400).json({ error: 'Clé invalide — seules les photos galerie sont modifiables' });
     const { titre, descriptif } = req.body;
     const existing = await prisma.siteConfig.findUnique({ where: { cle } });
     if (!existing) return res.status(404).json({ error: 'Photo introuvable' });
@@ -72,6 +75,9 @@ export async function modifierPhoto(req: Request, res: Response) {
 export async function supprimerPhoto(req: Request, res: Response) {
   try {
     const { cle } = req.params;
+    // [SÉCURITÉ] Seules les clés galerie sont supprimables via ce endpoint
+    if (!cle.startsWith('GALERIE_PHOTO_'))
+      return res.status(400).json({ error: 'Clé invalide — seules les photos galerie sont supprimables' });
     const existing = await prisma.siteConfig.findUnique({ where: { cle } });
     if (!existing) return res.status(404).json({ error: 'Photo introuvable' });
     const data = JSON.parse(existing.valeur);

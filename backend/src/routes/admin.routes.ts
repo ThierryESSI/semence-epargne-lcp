@@ -12,11 +12,11 @@ import { getStats, getAuditLogs, getConfig, updateConfig } from '../controllers/
 
 const router = Router();
 router.use(authenticate);
-router.use(authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE'));
 
-router.get('/stats',       getStats);
-router.get('/audit',       getAuditLogs);
-router.get('/config',      getConfig);           // [FIX] route manquante
-router.put('/config/:cle', updateConfig);        // [FIX] route manquante
+// [SÉCURITÉ] Config globale (fees, bonus, maintenance) réservée à MASTER/SUPER_ADMIN
+router.get('/stats',       authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE'), getStats);
+router.get('/audit',       authorize('MASTER'), getAuditLogs);
+router.get('/config',      authorize('MASTER'), getConfig);
+router.put('/config/:cle', authorize('MASTER'), updateConfig);
 
 export default router;

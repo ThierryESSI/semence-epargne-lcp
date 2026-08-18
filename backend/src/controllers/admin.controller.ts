@@ -66,6 +66,7 @@ export async function getAuditLogs(req: Request, res: Response) {
   const page  = parseInt(req.query.page as string || '1');
   const limit = parseInt(req.query.limit as string || '50');
 
+  // [SÉCURITÉ] Seuls MASTER/SUPER_ADMIN voient tous les logs audit
   const [total, logs] = await Promise.all([
     prisma.auditLog.count(),
     prisma.auditLog.findMany({
@@ -77,14 +78,21 @@ export async function getAuditLogs(req: Request, res: Response) {
 }
 
 export async function getConfig(req: Request, res: Response) {
+  // [SÉCURITÉ] Seuls MASTER/SUPER_ADMIN voient la config globale (fees, bonus, etc.)
   const configs = await prisma.config.findMany({ orderBy: { cle: 'asc' } });
   return res.json({ data: configs });
 }
 
 export async function updateConfig(req: Request, res: Response) {
+  // [SÉCURITÉ] Seuls MASTER/SUPER_ADMIN peuvent modifier la config globale
   const { cle } = req.params;
   const { valeur } = req.body;
   if (!valeur) return res.status(400).json({ error: 'valeur requis' });
+
+  // Whitelist des clés modifiables
+  const allowedKeys = ['FRAIS_TAUX', 'PART_LCP', 'MAINTENANCE_MODE', 'BONUS_3MOIS_TAUX', 'BONUS_6MOIS_TAUX', 'BONUS_12MOIS_TAUX', 'SMS_SPKEY'];
+  if (!allowedKeys.includes(cle))
+    return res.status(400).json({ error: `Clé '${cle}' non modifiable via cet endpoint` });
 
   const cfg = await prisma.config.upsert({
     where: { cle }, update: { valeur }, create: { cle, valeur }

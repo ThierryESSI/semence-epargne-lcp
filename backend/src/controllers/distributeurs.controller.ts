@@ -117,7 +117,7 @@ export async function creerDistributeur(req: Request, res: Response) {
       const field = err.meta?.target?.[0] || 'champ';
       return res.status(409).json({ error: `Ce ${field} est déjà utilisé` });
     }
-    return res.status(500).json({ error: `Erreur serveur : ${err.message}` });
+    return res.status(500).json({ error: 'Erreur serveur lors de la création du distributeur' });
   }
 }
 

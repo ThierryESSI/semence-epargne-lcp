@@ -73,7 +73,7 @@ export async function getTransaction(req: Request, res: Response) {
     where: { id: req.params.id },
     include: {
       compte: { include: { user: { select: { nom: true, prenom: true, telephone: true } } } },
-      carte:  true
+      carte:  { select: { reference: true, montant: true } }
     }
   });
   if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });

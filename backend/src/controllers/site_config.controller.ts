@@ -85,6 +85,10 @@ export async function updateConfig(req: Request, res: Response) {
     const { cle } = req.params;
     const { valeur } = req.body;
     if (valeur === undefined) return res.status(400).json({ error: 'valeur requis' });
+    // [SÉCURITÉ] Whitelist des clés modifiables via cet endpoint (site_config)
+    const allowedPrefixes = ['SMS_TPL_', 'SITE_', 'GALERIE_', 'LOGO', 'BANNIERE', 'ACCUEIL_', 'APPUYER_'];
+    if (!allowedPrefixes.some(p => cle.startsWith(p)))
+      return res.status(400).json({ error: `Clé '${cle}' non modifiable via cet endpoint` });
     const cfg = await prisma.siteConfig.upsert({
       where:  { cle },
       update: { valeur, updatedBy: req.user!.userId },
@@ -99,6 +103,10 @@ export async function updateConfig(req: Request, res: Response) {
 export async function uploadConfigImage(req: Request, res: Response) {
   try {
     const { cle } = req.params;
+    // [SÉCURITÉ] Seules les clés d'images sont modifiables via cet endpoint
+    const allowedPrefixes = ['SITE_', 'GALERIE_PHOTO_', 'LOGO', 'BANNIERE'];
+    if (!allowedPrefixes.some(p => cle.startsWith(p)))
+      return res.status(400).json({ error: `Clé '${cle}' non autorisée pour l'upload d'image` });
     if (!req.file) return res.status(400).json({ error: 'Image requise' });
 
     // Supprimer l'ancienne image si elle existe
