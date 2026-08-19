@@ -25,6 +25,7 @@ import galerieRoutes      from './routes/galerie.routes';
 import iaRapportsRoutes   from './routes/ia_rapports.routes';
 import chatRoutes         from './routes/chat.routes';
 import unarciRoutes       from './routes/unarci.routes';
+import agenceRoutes       from './routes/agence.routes';
 import { errorHandler }   from './middleware/error.middleware';
 import { initSiteConfig } from './controllers/site_config.controller';
 
@@ -71,6 +72,7 @@ app.use('/api/galerie',       galerieRoutes);
 app.use('/api/ia',            iaRapportsRoutes);
 app.use('/api/chat',          chatRoutes);
 app.use('/api/unarci',        unarciRoutes);
+app.use('/api/agence',        agenceRoutes);
 
 // ── Health check ──────────────────────────────────────────────────
 app.get('/api/health', (_, res) => res.json({

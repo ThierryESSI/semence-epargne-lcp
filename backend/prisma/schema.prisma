@@ -47,8 +47,10 @@ enum StatutTransaction {
 
 enum TypeTransaction {
   DEPOT_CARTE
+  DEPOT_AGENCE
   TRANSFERT
   RETRAIT
+  RETRAIT_AGENCE
   COMMISSION
   FRAIS
   BONUS_EPARGNE
