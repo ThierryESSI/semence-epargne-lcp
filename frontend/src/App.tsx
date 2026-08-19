@@ -33,6 +33,7 @@ const ClientChat = lazy(() => import('./pages/client/ClientChat'));
 const UnarciAgency = lazy(() => import('./pages/admin/UnarciAgency'));
 const RechargesSMS = lazy(() => import('./pages/admin/RechargesSMS'));
 const AgenceOperations = lazy(() => import('./pages/admin/AgenceOperations'));
+const ForceChangePasswordPage = lazy(() => import('./pages/auth/ForceChangePasswordPage'));
 
 const ROLE_HOME: Record<string,string> = {
   SUPER_ADMIN:'/admin', MASTER:'/admin',
@@ -49,6 +50,10 @@ function HomeRedirect() {
 function Protected({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
   const user = useAuthStore(s => s.user);
   if (!user) return <Navigate to="/login" replace />;
+  if (user.mustChangePassword && window.location.pathname !== '/changer-mot-de-passe')
+    return <Navigate to="/changer-mot-de-passe" replace />;
+  if (!user.mustChangePassword && window.location.pathname === '/changer-mot-de-passe')
+    return <Navigate to={ROLE_HOME[user.role] || '/login'} replace />;
   if (roles && !roles.includes(user.role)) return <Navigate to="/app" replace />;
   return <>{children}</>;
 }
@@ -66,6 +71,7 @@ export default function App() {
         <Route path="/unarci" element={<UnarciPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app"   element={<HomeRedirect />} />
+        <Route path="/changer-mot-de-passe" element={<Protected><ForceChangePasswordPage /></Protected>} />
 
         {/* Admin */}
         <Route path="/admin" element={<Protected roles={ADMIN}><Layout /></Protected>}>

@@ -29,7 +29,7 @@ export async function login(req: Request, res: Response) {
   // [FIX 1] Recherche par email OU téléphone
   const user = await prisma.user.findFirst({
     where: { OR: [{ email }, { telephone: email }] },
-    select: { id:true, email:true, nom:true, prenom:true, role:true, actif:true, passwordHash:true, telephone:true }
+    select: { id:true, email:true, nom:true, prenom:true, role:true, actif:true, mustChangePassword:true, passwordHash:true, telephone:true }
   });
 
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
@@ -52,7 +52,7 @@ export async function login(req: Request, res: Response) {
 
   return res.json({
     accessToken, refreshToken: refresh,
-    user: { id:user.id, email:user.email, nom:user.nom, prenom:user.prenom, role:user.role }
+    user: { id:user.id, email:user.email, nom:user.nom, prenom:user.prenom, role:user.role, mustChangePassword: user.mustChangePassword }
   });
 }
 
@@ -86,7 +86,7 @@ export async function getMe(req: Request, res: Response) {
   const user = await prisma.user.findUnique({
     where:{ id:req.user!.userId },
     select:{
-      id:true, email:true, nom:true, prenom:true, role:true, telephone:true, actif:true, createdAt:true,
+      id:true, email:true, nom:true, prenom:true, role:true, telephone:true, actif:true, mustChangePassword:true, createdAt:true,
       compte:{ select:{ numeroCompte:true, rib:true, solde:true, type:true, statut:true } },
       clients:{ select:{ code:true, region:true, ville:true, commune:true } },
       conseillers:{ select:{ code:true, type:true } },
@@ -106,4 +106,21 @@ export async function changePassword(req: Request, res: Response) {
     return res.status(400).json({ error:'Ancien mot de passe incorrect' });
   await prisma.user.update({ where:{ id:user.id }, data:{ passwordHash:await bcrypt.hash(nouveauPassword,12), refreshToken:null } });
   return res.json({ success:true, message:'Mot de passe modifié. Reconnectez-vous.' });
+}
+
+// [PREMIERE CONNEXION] Changement de mot de passe forcé (pas d'ancien mdp requis)
+export async function forceChangePassword(req: Request, res: Response) {
+  const { nouveauPassword } = req.body;
+  if (!nouveauPassword) return res.status(400).json({ error:'Nouveau mot de passe requis' });
+  if (nouveauPassword.length < 8) return res.status(400).json({ error:'Mot de passe trop court (min 8 caractères)' });
+
+  const user = await prisma.user.findUnique({ where:{ id:req.user!.userId } });
+  if (!user) return res.status(404).json({ error:'Utilisateur introuvable' });
+  if (!user.mustChangePassword) return res.status(400).json({ error:'Changement de mot de passe déjà effectué' });
+
+  await prisma.user.update({
+    where:{ id:user.id },
+    data:{ passwordHash:await bcrypt.hash(nouveauPassword,12), mustChangePassword:false, refreshToken:null }
+  });
+  return res.json({ success:true, message:'Mot de passe modifié avec succès.' });
 }

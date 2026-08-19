@@ -126,6 +126,7 @@ export async function ouvrirCompte(req: Request, res: Response) {
         prenom:        prenom.trim(),
         role:          Role.CLIENT,
         actif:         true,
+        mustChangePassword: true,
       }
     });
 

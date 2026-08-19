@@ -175,6 +175,7 @@ model User {
   dateNaissance   DateTime?
   role            Role
   actif           Boolean          @default(false)
+  mustChangePassword Boolean       @default(false)
   permissions     Permission[]
   cniRecto        String?
   cniVerso        String?

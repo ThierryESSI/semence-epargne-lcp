@@ -8,6 +8,7 @@ interface User {
   id: string; email: string; nom: string; prenom: string;
   role: string; telephone: string; whatsapp?: string;
   notifWhatsapp?: boolean; notifEmail?: boolean;
+  mustChangePassword?: boolean;
   permissions?: string[];
   compte?: { numeroCompte: string; rib: string; solde: number; statut: string; type: string; };
 }
