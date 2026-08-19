@@ -27,6 +27,13 @@ export default function Clients() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState<any>(null);
 
+  // ─── ÉTAT MODIFICATION ──────────────────────────────────────────────────
+  const [editClient, setEditClient] = useState<any>(null);
+  const [editForm, setEditForm] = useState<any>({});
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState(false);
+
   const [form, setForm] = useState({
     nom: '', prenom: '', telephone: '', email: '',
     dateNaissance: '', cni: '',
@@ -35,6 +42,7 @@ export default function Clients() {
     conseillerId: '',
   });
   const sf = (k: string) => (e: any) => setForm(f => ({ ...f, [k]: e.target.value }));
+  const sef = (k: string) => (e: any) => setEditForm((f: any) => ({ ...f, [k]: e.target.value }));
 
   async function handleCreate(e: any) {
     e.preventDefault();
@@ -84,6 +92,42 @@ export default function Clients() {
     }
   }
 
+  // ─── MODIFICATION CLIENT ────────────────────────────────────────────────
+  function openEdit(c: any) {
+    setEditClient(c);
+    setEditForm({
+      nom: c.user?.nom || '',
+      prenom: c.user?.prenom || '',
+      telephone: c.user?.telephone || '',
+      email: c.user?.email?.includes('@semence-noemail.ci') ? '' : (c.user?.email || ''),
+      dateNaissance: c.user?.dateNaissance ? c.user.dateNaissance.slice(0, 10) : '',
+      region: c.region || '',
+      commune: c.commune || '',
+      ville: c.ville || '',
+    });
+    setEditError(''); setEditSuccess(false);
+  }
+
+  function closeEdit() { setEditClient(null); setEditError(''); setEditSuccess(false); }
+
+  async function handleEdit(e: any) {
+    e.preventDefault();
+    setEditError(''); setEditSubmitting(true);
+    try {
+      await api.put(`/clients/${editClient.id}`, {
+        ...editForm,
+        email: editForm.email || undefined,
+        dateNaissance: editForm.dateNaissance || undefined,
+        ville: editForm.ville || editForm.commune || editForm.region,
+      });
+      setEditSuccess(true);
+      refetch();
+      setTimeout(closeEdit, 1500);
+    } catch (err: any) {
+      setEditError(err.response?.data?.error || 'Erreur lors de la modification');
+    } finally { setEditSubmitting(false); }
+  }
+
   return (
     <div>
       <PageHeader
@@ -130,8 +174,8 @@ export default function Clients() {
                 <TD muted>{formatDate(c.user?.createdAt, 'dd/MM/yyyy')}</TD>
                 <TD>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, padding: 4 }}>
-                      <Icon d={ICONS.eye} size={16} />
+                    <button onClick={() => openEdit(c)} title="Modifier" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.blue, padding: 4 }}>
+                      <Icon d={ICONS.edit} size={16} />
                     </button>
                     {isExpert && (
                       <button onClick={() => handleDelete(c)} title="Supprimer"
@@ -248,6 +292,52 @@ export default function Clients() {
               <div style={{ marginTop: 8 }}>
                 <Btn type="submit" loading={submitting} disabled={conseillerList.length === 0} style={{ width: '100%', justifyContent: 'center', padding: '13px' }} size="lg">
                   Créer le compte
+                </Btn>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
+
+      {/* ─── MODAL MODIFICATION CLIENT ─── */}
+      {editClient && (
+        <Modal title={`Modifier ${editClient.user?.prenom} ${editClient.user?.nom}`} onClose={closeEdit}>
+          {editSuccess ? (
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <div style={{ fontSize: 52, marginBottom: 16 }}>✅</div>
+              <h3 style={{ color: C.green, margin: '0 0 8px' }}>Client modifié avec succès !</h3>
+              <p style={{ color: C.textMuted, fontSize: 13 }}>Les modifications ont été enregistrées.</p>
+            </div>
+          ) : (
+            <form onSubmit={handleEdit}>
+              <SectionLabel>ÉTAT CIVIL</SectionLabel>
+              <FormGrid>
+                <Input label="Nom" required value={editForm.nom} onChange={sef('nom')} placeholder="NOM" />
+                <Input label="Prénoms" required value={editForm.prenom} onChange={sef('prenom')} placeholder="Prénoms" />
+              </FormGrid>
+              <FormGrid>
+                <Input label="Téléphone" type="tel" required value={editForm.telephone} onChange={sef('telephone')} disabled={!isExpert} hint={!isExpert ? 'Seul un admin peut modifier le téléphone' : undefined} />
+                <Input label="Email" type="email" value={editForm.email} onChange={sef('email')} placeholder="optionnel" disabled={!isExpert} />
+              </FormGrid>
+              <FormGrid>
+                <Input label="Date de naissance" type="date" value={editForm.dateNaissance} onChange={sef('dateNaissance')} disabled={!isExpert} />
+                <Input label="WhatsApp" type="tel" value={editForm.whatsapp || ''} onChange={sef('whatsapp')} placeholder="optionnel" />
+              </FormGrid>
+
+              <SectionLabel>LOCALISATION</SectionLabel>
+              <FormGrid cols={3}>
+                <Input label="Région" required value={editForm.region} onChange={sef('region')} />
+                <Input label="Commune" required value={editForm.commune} onChange={sef('commune')} />
+                <Input label="Ville" value={editForm.ville} onChange={sef('ville')} placeholder="optionnel" />
+              </FormGrid>
+
+              {editError && <Alert type="error">{editError}</Alert>}
+              {editError && <div style={{ height: 8 }} />}
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                <Btn variant="secondary" onClick={closeEdit} style={{ flex: 1, justifyContent: 'center' }}>Annuler</Btn>
+                <Btn type="submit" loading={editSubmitting} style={{ flex: 2, justifyContent: 'center', padding: '12px' }}>
+                  Enregistrer les modifications
                 </Btn>
               </div>
             </form>

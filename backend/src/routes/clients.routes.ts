@@ -8,10 +8,11 @@
 // backend/src/routes/clients.routes.ts
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
-import { listerClients, getClient } from '../controllers/clients.controller';
+import { listerClients, getClient, modifierClient } from '../controllers/clients.controller';
 
 const router = Router();
 router.use(authenticate);
 router.get('/', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER','CLIENTS_VOIR'), listerClients);
 router.get('/:id', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER','CLIENTS_DETAILS'), getClient);
+router.put('/:id', authorize('MASTER','DISTRIBUTEUR_INTERNE','DISTRIBUTEUR_AGREE','CONSEILLER','CLIENTS_MODIFIER'), modifierClient);
 export default router;
