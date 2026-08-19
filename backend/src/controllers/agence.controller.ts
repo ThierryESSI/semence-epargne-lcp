@@ -206,6 +206,8 @@ export async function confirmerRetrait(req: Request, res: Response) {
       }
     });
     if (!retrait) return res.status(404).json({ error: 'Retrait introuvable' });
+    if (!(await verifierAccesClient(retrait.compteSource.userId, req.user!.role, req.user!.userId)))
+      return res.status(403).json({ error: 'Accès refusé : vous n\'êtes pas autorisé à confirmer ce retrait' });
     if (retrait.statut !== 'EN_ATTENTE')
       return res.status(400).json({ error: `Retrait déjà ${retrait.statut.toLowerCase()}` });
     if (retrait.codeExpireAt && new Date() > retrait.codeExpireAt)
@@ -504,14 +506,49 @@ export async function confirmerVirement(req: Request, res: Response) {
 // ══════════════════════════════════════════════════════════════════════════
 export async function historiqueAgence(req: Request, res: Response) {
   try {
-    const page = parseInt(req.query.page as string || '1');
-    const limit = parseInt(req.query.limit as string || '20');
+    const page = Math.max(1, parseInt(req.query.page as string || '1') || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string || '20') || 20));
 
-    // Filtrer les transactions avec metadata.canal = 'AGENCE'
+    // [SÉCURITÉ] Base filtre : toutes les transactions canal=AGENCE
+    const where: any = { metadata: { path: ['canal'], equals: 'AGENCE' } };
+
+    // [SÉCURITÉ] Scoping par rôle : un conseiller ne voit que ses clients
+    if (req.user!.role === 'CONSEILLER') {
+      const acteur = await prisma.conseiller.findFirst({ where: { userId: req.user!.userId }, select: { id: true } });
+      if (acteur) {
+        const clientUserIds = await prisma.client.findMany({
+          where: { conseillerId: acteur.id },
+          select: { userId: true },
+        });
+        const userIds = clientUserIds.map(c => c.userId);
+        if (userIds.length === 0) {
+          return res.json({ data: [], pagination: { total: 0, page, limit, pages: 0 } });
+        }
+        where.compteId = { in: (await prisma.compte.findMany({ where: { userId: { in: userIds } }, select: { id: true } })).map(c => c.id) };
+      }
+    } else if (req.user!.role === 'DISTRIBUTEUR_INTERNE' || req.user!.role === 'DISTRIBUTEUR_AGREE') {
+      const acteur = await prisma.distributeur.findFirst({ where: { userId: req.user!.userId }, select: { id: true } });
+      if (acteur) {
+        const conseillerIds = (await prisma.conseiller.findMany({
+          where: { distributeurId: acteur.id }, select: { id: true },
+        })).map(c => c.id);
+        const clientUserIds = await prisma.client.findMany({
+          where: { conseillerId: { in: conseillerIds } },
+          select: { userId: true },
+        });
+        const userIds = clientUserIds.map(c => c.userId);
+        if (userIds.length === 0) {
+          return res.json({ data: [], pagination: { total: 0, page, limit, pages: 0 } });
+        }
+        where.compteId = { in: (await prisma.compte.findMany({ where: { userId: { in: userIds } }, select: { id: true } })).map(c => c.id) };
+      }
+    }
+    // MASTER / SUPER_ADMIN : pas de scoping (voit tout)
+
     const [total, transactions] = await Promise.all([
-      prisma.transaction.count({ where: { metadata: { path: ['canal'], equals: 'AGENCE' } } }),
+      prisma.transaction.count({ where }),
       prisma.transaction.findMany({
-        where: { metadata: { path: ['canal'], equals: 'AGENCE' } },
+        where,
         skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' },
         include: {
           compte: { include: { user: { select: { nom: true, prenom: true } } } },

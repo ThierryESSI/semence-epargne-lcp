@@ -18,6 +18,7 @@ const NAV_ADMIN = [
   { to:'/admin/ia',             label:'Analyse IA',        icon:'◆' },
   { to:'/admin/galerie',        label:'Galerie photos',    icon:'▢' },
   { to:'/admin/unarci',         label:'Adhésions UNARCI',  icon:'◎' },
+  { to:'/admin/agence',         label:'Opérations agence',  icon:'◈' },
   { to:'/admin/recharges-sms',  label:'Recharges SMS',     icon:'◎' },
   { to:'/admin/admins',         label:'Gestion Admins',    icon:'◉' },
   { to:'/admin/rapports',       label:'Rapports',          icon:'▦' },
