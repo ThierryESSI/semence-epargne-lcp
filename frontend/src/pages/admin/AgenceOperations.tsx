@@ -518,21 +518,38 @@ export default function AgenceOperations() {
             {step === 'form' && tab === 'historique' && (
               <div>
                 <TableWrapper>
-                  <THead cols={['Type', 'Client', 'Montant', 'Référence', 'Date']} />
+                  <THead cols={['Type', 'Client', 'Montant', 'Opérateur', 'Agence', 'IP', 'Date']} />
                   <tbody>
-                    {loadHist ? <tr><td colSpan={5}><Spinner /></td></tr>
-                    : historique.length === 0 ? <tr><td colSpan={5}><Empty msg="Aucune opération en agence pour le moment." /></td></tr>
-                    : historique.map((tx: any) => (
-                      <TR key={tx.id}>
-                        <TD><Badge v={tx.type?.replace(/_/g, ' ')} /></TD>
-                        <TD bold>{tx.compte?.user?.prenom} {tx.compte?.user?.nom}</TD>
-                        <TD bold style={{ color: Number(tx.montantNet) >= 0 ? C.green : C.red }}>
-                          {Number(tx.montantNet) >= 0 ? '+' : ''}{formatMontant(tx.montant)}
-                        </TD>
-                        <TD mono muted>{tx.reference?.slice(0, 16)}...</TD>
-                        <TD muted>{formatDate(tx.createdAt, 'dd/MM/yyyy HH:mm')}</TD>
-                      </TR>
-                    ))}
+                    {loadHist ? <tr><td colSpan={7}><Spinner /></td></tr>
+                    : historique.length === 0 ? <tr><td colSpan={7}><Empty msg="Aucune opération en agence pour le moment." /></td></tr>
+                    : historique.map((tx: any) => {
+                      const m = tx.metadata || {};
+                      return (
+                        <TR key={tx.id}>
+                          <TD><Badge v={tx.type?.replace(/_/g, ' ')} /></TD>
+                          <TD bold>{tx.compte?.user?.prenom} {tx.compte?.user?.nom}</TD>
+                          <TD bold style={{ color: Number(tx.montantNet) >= 0 ? C.green : C.red }}>
+                            {Number(tx.montantNet) >= 0 ? '+' : ''}{formatMontant(tx.montant)}
+                          </TD>
+                          <TD>
+                            {m.actorPrenom || m.actorNom
+                              ? <span style={{ fontSize: 13 }}>{m.actorPrenom} {m.actorNom}</span>
+                              : <span style={{ fontSize: 12, color: C.textMuted }}>{m.actorRole || '—'}</span>
+                            }
+                            {m.actorCode && <span style={{ fontSize: 11, color: C.textMuted, display: 'block' }}>{m.actorCode}</span>}
+                          </TD>
+                          <TD>
+                            {m.agenceNom
+                              ? <span style={{ fontSize: 13 }}>{m.agenceNom}</span>
+                              : <span style={{ fontSize: 12, color: C.textMuted }}>—</span>
+                            }
+                            {m.agenceVille && <span style={{ fontSize: 11, color: C.textMuted, display: 'block' }}>{m.agenceVille}</span>}
+                          </TD>
+                          <TD mono muted style={{ fontSize: 12 }}>{m.ipAddress || '—'}</TD>
+                          <TD muted style={{ fontSize: 12 }}>{formatDate(tx.createdAt, 'dd/MM/yyyy HH:mm')}</TD>
+                        </TR>
+                      );
+                    })}
                   </tbody>
                 </TableWrapper>
                 <Pagination page={page} pages={pagination.pages} onChange={setPage} />

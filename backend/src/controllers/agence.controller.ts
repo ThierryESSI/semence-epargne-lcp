@@ -24,6 +24,80 @@ async function verifierAccesClient(clientUserId: string, role: string, actorUser
   return clientAppartientA(clientUserId, role, actorUserId);
 }
 
+// ─── Construire les métadonnées de traçabilité agence ───────────────────
+async function buildAgenceMeta(req: Request): Promise<Record<string, any>> {
+  const actorUserId = req.user!.userId;
+  const role = req.user!.role;
+
+  // IP + user-agent
+  const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 'unknown';
+  const userAgent = (req.headers['user-agent'] as string) || 'unknown';
+
+  const meta: Record<string, any> = {
+    canal: 'AGENCE',
+    actorId: actorUserId,
+    actorRole: role,
+    ipAddress,
+    userAgent,
+    timestamp: new Date().toISOString(),
+  };
+
+  // Infos du conseiller/distributeur acteur
+  if (role === 'CONSEILLER') {
+    const conseiller = await prisma.conseiller.findFirst({
+      where: { userId: actorUserId },
+      select: {
+        id: true, code: true, type: true, region: true, commune: true,
+        distributeur: { select: { id: true, code: true, nomEntreprise: true, ville: true, siege: true } },
+      }
+    });
+    if (conseiller) {
+      meta.actorCode = conseiller.code;
+      meta.actorType = conseiller.type;
+      meta.actorNom = req.user!.telephone; // fallback
+      meta.agenceId = conseiller.distributeur.id;
+      meta.agenceCode = conseiller.distributeur.code;
+      meta.agenceNom = conseiller.distributeur.nomEntreprise;
+      meta.agenceVille = conseiller.distributeur.ville;
+      meta.agenceSiege = conseiller.distributeur.siege;
+    }
+    // Récupérer le nom complet de l'acteur
+    const actorUser = await prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { nom: true, prenom: true }
+    });
+    if (actorUser) { meta.actorNom = actorUser.nom; meta.actorPrenom = actorUser.prenom; }
+  } else if (role === 'DISTRIBUTEUR_INTERNE' || role === 'DISTRIBUTEUR_AGREE') {
+    const distributeur = await prisma.distributeur.findFirst({
+      where: { userId: actorUserId },
+      select: { id: true, code: true, nomEntreprise: true, ville: true, siege: true, type: true }
+    });
+    if (distributeur) {
+      meta.actorCode = distributeur.code;
+      meta.actorType = distributeur.type;
+      meta.agenceId = distributeur.id;
+      meta.agenceCode = distributeur.code;
+      meta.agenceNom = distributeur.nomEntreprise;
+      meta.agenceVille = distributeur.ville;
+      meta.agenceSiege = distributeur.siege;
+    }
+    const actorUser = await prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { nom: true, prenom: true }
+    });
+    if (actorUser) { meta.actorNom = actorUser.nom; meta.actorPrenom = actorUser.prenom; }
+  } else {
+    // MASTER / SUPER_ADMIN
+    const actorUser = await prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { nom: true, prenom: true }
+    });
+    if (actorUser) { meta.actorNom = actorUser.nom; meta.actorPrenom = actorUser.prenom; }
+  }
+
+  return meta;
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // DÉPÔT EN AGENCE (conseiller crédite le compte du client)
 // ══════════════════════════════════════════════════════════════════════════
@@ -51,8 +125,10 @@ export async function depotEnAgence(req: Request, res: Response) {
     if (compte.statut !== 'ACTIF')
       return res.status(400).json({ error: 'Le compte client n\'est pas actif' });
 
-    const frais = 0; // Dépôt en agence sans frais
+    const frais = 0;
     const net = montantNum;
+    const meta = await buildAgenceMeta(req);
+    meta.motif = motif || 'Dépôt agence';
 
     const [transaction] = await prisma.$transaction([
       prisma.transaction.create({
@@ -64,8 +140,8 @@ export async function depotEnAgence(req: Request, res: Response) {
           montantNet: net,
           statut: 'SUCCES',
           compteId: compte.id,
-          description: `Dépôt en agence par ${req.user!.role} — ${motif || 'Dépôt agence'}`,
-          metadata: { canal: 'AGENCE', actorId: req.user!.userId, motif }
+          description: `Dépôt en agence par ${meta.actorPrenom || ''} ${meta.actorNom || ''} (${meta.actorCode || req.user!.role})`,
+          metadata: meta
         }
       }),
       prisma.compte.update({ where: { id: compte.id }, data: { solde: { increment: net } } }),
@@ -77,7 +153,8 @@ export async function depotEnAgence(req: Request, res: Response) {
         entite: 'Transaction',
         entiteId: transaction.id,
         actorId: req.user!.userId,
-        details: { clientUserId, montant: montantNum, frais, net, motif }
+        ipAddress: meta.ipAddress,
+        details: { clientUserId, montant: montantNum, frais, net, motif, agence: meta.agenceNom, actorCode: meta.actorCode }
       }
     });
 
@@ -138,6 +215,8 @@ export async function initierRetrait(req: Request, res: Response) {
 
     const otp = genOTP();
     const expireAt = new Date(Date.now() + 10 * 60 * 1000);
+    const meta = await buildAgenceMeta(req);
+    meta.motif = motif || 'Retrait en agence';
 
     // Créer le retrait en attente
     const retrait = await prisma.virement.create({
@@ -168,7 +247,8 @@ export async function initierRetrait(req: Request, res: Response) {
         entite: 'Virement',
         entiteId: retrait.id,
         actorId: req.user!.userId,
-        details: { clientUserId, montant: montantNum, destinataireOtp: cible, motif }
+        ipAddress: meta.ipAddress,
+        details: { clientUserId, montant: montantNum, destinataireOtp: cible, motif, agence: meta.agenceNom, actorCode: meta.actorCode }
       }
     });
 
@@ -262,6 +342,7 @@ export async function confirmerRetrait(req: Request, res: Response) {
         entite: 'Virement',
         entiteId: retrait.id,
         actorId: req.user!.userId,
+        ipAddress: req.ip || 'unknown',
         details: { montant, clientUserId: retrait.compteSource.userId }
       }
     });
@@ -330,6 +411,8 @@ export async function initierVirement(req: Request, res: Response) {
 
     const otp = genOTP();
     const expireAt = new Date(Date.now() + 10 * 60 * 1000);
+    const meta = await buildAgenceMeta(req);
+    meta.motif = motif || 'Virement en agence';
 
     const virement = await prisma.virement.create({
       data: {
@@ -358,7 +441,8 @@ export async function initierVirement(req: Request, res: Response) {
         entite: 'Virement',
         entiteId: virement.id,
         actorId: req.user!.userId,
-        details: { clientUserIdSource, montant: montantNum, ribDest, destinataireOtp: cible, motif }
+        ipAddress: meta.ipAddress,
+        details: { clientUserIdSource, montant: montantNum, ribDest, destinataireOtp: cible, motif, agence: meta.agenceNom, actorCode: meta.actorCode }
       }
     });
 
@@ -460,6 +544,7 @@ export async function confirmerVirement(req: Request, res: Response) {
         entite: 'Virement',
         entiteId: virement.id,
         actorId: req.user!.userId,
+        ipAddress: req.ip || 'unknown',
         details: { montant, clientUserIdSource: virement.compteSource.userId, clientUserIdDest: virement.compteDest.userId }
       }
     });
